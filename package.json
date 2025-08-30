@@ -10,12 +10,22 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
+    "express boilerplate",
+    "backend boilerplate",
+    "create structure",
+    "project-structure-cli",
+    "create-structure",
+    "create",
+    "structure",
     "cli",
+    "boilerplate cli",
     "project-structure",
     "folders",
     "automation"
   ],
   "author": "Sayantan Chakraborty",
   "license": "MIT",
-  "dependencies": {}
+  "dependencies": {
+    "inquirer": "^12.9.3"
+  }
 }

@@ -1,8 +1,12 @@
+<img width="75px" height="75px" align="right" alt="create-structure-cli" src="https://raw.githubusercontent.com/SayantanCode/cli-project-structure-builder/main/assets/create-structure-cli-logo.png?sanitize=true" title="create-structure-cli"/>
+
+
+[![npm version](https://badge.fury.io/js/create-structure-cli.svg)](https://badge.fury.io/js/create-structure-cli)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Socket Badge](https://socket.dev/api/badge/npm/package/create-structure-cli/1.0.1)](https://socket.dev/npm/package/create-structure-cli/overview/1.0.1)
+![NPM Downloads](https://img.shields.io/npm/dm/create-structure-cli)
 # create-structure-cli
 
-<!-- [![npm version](https://badge.fury.io/js/create-structure.svg)](https://badge.fury.io/js/create-structure)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) -->
-<!-- [![Node.js Version](https://img.shields.io/node/v/create-structure.svg)](https://nodejs.org/en/download/) -->
 
 > 🚀 A powerful CLI tool to instantly create directory structures from text files or JSON templates
 
@@ -14,7 +18,7 @@ Quickly scaffold project directories, organize file structures, and set up devel
 - 🎯 **Interactive Mode**: Smart prompts when arguments are missing
 - 🛡️ **Robust Error Handling**: Comprehensive validation and user-friendly error messages
 - 🌍 **Cross-Platform**: Works on Windows(tested), macOS(test needed), and Linux(test needed)
-- ⚡ **Fast & Lightweight**: Zero dependencies, pure Node.js
+- ⚡ **Fast & Lightweight**: Minimal dependencies, pure Node.js
 - 🔄 **Flexible Paths**: Support for both absolute and relative paths
 - 📝 **Batch Operations**: Create complex nested structures in seconds
 
