@@ -1,8 +1,12 @@
 #!/usr/bin/env node
+//native modules
 import fs from "fs";
 import path from "path";
+import { spawn } from "child_process";
+//external modules
 import inquirer from "inquirer";
 import chalk from "chalk";
+//local modules
 import reactViteJsBoilerplate from "./templates/reactViteJsBoilerplate.js";
 import reactViteTsBoilerplate from "./templates/reactViteTsBoilerplate.js";
 import nextJsPagesRouterBoilerplate from "./templates/nextJsPageRouterBoilerplate.js";
@@ -22,7 +26,41 @@ const log = {
   error: (message) => console.error(chalk.red(message)),
   success: (message) => console.log(chalk.green(message)),
   debug: (message) => console.debug(chalk.gray(message)),
+  custom: (message, style) => {
+    const allStyles = style.split(".").map((s) => s.trim());
+    let styledMessage = chalk;
+
+    allStyles.forEach((s) => {
+      if (/^rgb\(/i.test(s)) {
+        // handle rgb(255,0,0)
+        const values = s
+          .replace(/^rgb\(/i, "")
+          .replace(/\)$/, "")
+          .split(",")
+          .map(Number);
+        styledMessage = styledMessage.rgb(...values);
+      } else if (/^hex\(/i.test(s)) {
+        // handle hex(#ff0000)
+        const hex = s
+          .replace(/^hex\(/i, "")
+          .replace(/\)$/, "")
+          .replace(/['"]/g, "");
+        styledMessage = styledMessage.hex(hex);
+      } else if (styledMessage[s]) {
+        // handle normal chalk styles like bold, underline, bgRed
+        styledMessage = styledMessage[s];
+      } else {
+        console.warn(chalk.yellow(`⚠️ Unknown chalk style: ${s}`));
+      }
+    });
+
+    console.log(styledMessage(message));
+  },
 };
+// log.custom(
+//   "✨ Starting Create-Structure-CLI...",
+//   "rgb(85, 254, 254).underline"
+// );
 
 /**
  * Maping template keys to their corresponding boilerplate functions.
@@ -131,7 +169,7 @@ async function maybeInstallDependencies(outDir, packageJsonContent) {
       // Loader animation while installing
       const loaderChars = ["|", "/", "-", "\\"];
       const dots = ["", ".", "..", "..."];
-      const spaces =["   ", "  ", " ", ""];
+      const spaces = ["   ", "  ", " ", ""];
       let i = 0;
       let seconds = 0;
 
@@ -163,14 +201,20 @@ async function maybeInstallDependencies(outDir, packageJsonContent) {
               timeElapsed / 1000
             } seconds`
           );
-          log.info(`🚀 Happy coding! To open in VS Code, type 'cd ${outDir} && code .'`);
+          log.custom(
+            `🚀 Happy coding! To open in VS Code, type 'cd ${outDir} && code .'`,
+            "rgb(194, 156, 247).bold"
+          );
         }
       });
     } else {
       log.warn(
         `⚠️ Remember to install dependencies manually. Run 'cd ${outDir} && npm install'`
       );
-      log.info(`🚀 Happy coding! To open in VS Code, type 'cd ${outDir} && code .'`);
+      log.custom(
+        `🚀 Happy coding! To open in VS Code, type 'cd ${outDir} && code .'`,
+        "rgb(194, 156, 247).bold"
+      );
     }
   } catch {
     // ignore if parsing fails
@@ -181,25 +225,140 @@ async function maybeInstallDependencies(outDir, packageJsonContent) {
  * Main entry point with Inquirer flow.
  */
 async function main() {
+  log.custom(
+  "\n✨ Welcome to Create-Structure-CLI! \n",
+  "rgb(85, 254, 254).underline"
+);
+log.custom(
+  "🚀 Quickly scaffold your project structure with ease. 🚀 \n\n",
+  "rgb(85, 254, 254).italic"
+);
   try {
     const { mode } = await inquirer.prompt([
       {
         type: "list",
         name: "mode",
         message: "What do you want to do?",
-        choices: ["📂 Custom Structure", "⚡ Built-in Template"],
+        choices: [
+          "🔩 Official Template( np* create-* )",
+          "⚡️ Our Built-in Template",
+          "📂 Custom Structure",
+        ],
       },
     ]);
 
     if (mode === "📂 Custom Structure") {
       await handleCustom();
-    } else {
+    } else if (mode === "⚡️ Our Built-in Template") {
       await handleTemplate();
+    } else if (mode === "🔩 Official Template( np* create-* )") {
+      await handleOfficial();
     }
   } catch (error) {
     log.error(`❌ Unexpected error: ${error.message}`);
     process.exit(1);
   }
+  return;
+}
+
+// Helper: run official commands
+/**
+ * Runs a command with arguments in a given directory.
+ * @param {string} cmd - The command to run.
+ * @param {string[]} args - The command arguments.
+ * @param {string} cwd - The working directory to run the command in.
+ * @returns {Promise<void>} - Resolves when the command completes successfully, rejects on error.
+ */
+function runCommand(cmd, args, cwd) {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(cmd, args, { stdio: "inherit", cwd, shell: true }); // need to research more on this
+    proc.on("close", (code) =>
+      code === 0 ? resolve() : reject(new Error(`${cmd} failed`))
+    );
+  });
+}
+
+/**
+ * Handle flow for official templates.
+ */
+async function handleOfficial() {
+  const { framework } = await inquirer.prompt([
+    {
+      type: "list",
+      name: "framework",
+      message: "Choose an official framework/library:",
+      choices: [
+        "React (CRA)",
+        "Vite",
+        "Next.js",
+        "Angular",
+        // "Express",
+        "Fastify",
+        "Nest.js",
+      ],
+    },
+  ]);
+
+  const { projectName } = await inquirer.prompt([
+    {
+      type: "input",
+      name: "projectName",
+      message: "Enter project name:",
+      validate: (val) => (val ? true : "Project name is required"),
+    },
+  ]);
+
+  log.info(`⚙️ Setting up ${framework} project...`);
+
+  try {
+    if (framework === "React (CRA)") {
+      await runCommand("npx", ["create-react-app", projectName], process.cwd());
+    } else if (framework === "Vite") {
+      await runCommand(
+        "npm",
+        ["create", "vite@latest", projectName],
+        process.cwd()
+      );
+    } else if (framework === "Next.js") {
+      await runCommand(
+        "npx",
+        ["create-next-app@latest", projectName],
+        process.cwd()
+      );
+    } else if (framework === "Angular") {
+      await runCommand(
+        "npx",
+        ["-p", "@angular/cli", "ng", "new", projectName],
+        process.cwd()
+      );
+    }
+    // else if (framework === "Express") {
+    //   await runCommand("npx", ["express-generator", projectName], process.cwd());
+    // }
+    else if (framework === "Fastify") {
+      await runCommand(
+        "npx",
+        ["fastify-cli", "generate", projectName],
+        process.cwd()
+      );
+    } else if (framework === "Nest.js") {
+      await runCommand(
+        "npx",
+        ["@nestjs/cli", "new", projectName],
+        process.cwd()
+      );
+    }
+    log.success(`✅ ${framework} project created at ${projectName}`);
+    log.custom(
+      `🚀 Happy coding! To open in VS Code, type 'cd ${projectName} && code .'`,
+      "rgb(194, 156, 247).bold"
+    );
+  } catch (err) {
+    log.error(`❌ Failed to create ${framework} project: ${err.message}`);
+    process.exit(1);
+  }
+  // log.info(`🚀 Happy coding! To open in VS Code, type 'cd ${projectName} && code .'`);
+  return;
 }
 
 /**
@@ -481,7 +640,21 @@ async function processStructure(filePath, outputBase) {
     process.exit(1);
   }
 }
-
+// Decode content if it's base64 encoded (for binary files) or return as is
+function decodeContent(content) {
+  // assumimg base64 if starts with data: not a foolproof check need better way
+  if (content.startsWith("data:")) {
+    try {
+      const base64Data = content.split(",")[1];
+      return Buffer.from(base64Data, "base64");
+    } catch (error) {
+      log.error(`❌ Error decoding content: ${error.message}`);
+      throw error;
+    }
+  }
+  // return as is if not base64
+  return content;
+}
 /**
  * Create files/folders from JSON.
  */
@@ -491,7 +664,8 @@ function createFromJson(structure, basePath) {
       const fullPath = path.join(basePath, name);
       if (typeof structure[name] === "string") {
         fs.mkdirSync(path.dirname(fullPath), { recursive: true });
-        fs.writeFileSync(fullPath, structure[name]);
+        const content = decodeContent(structure[name]); // returns Buffer or string
+        fs.writeFileSync(fullPath, content);
       } else {
         fs.mkdirSync(fullPath, { recursive: true });
         createFromJson(structure[name], fullPath);

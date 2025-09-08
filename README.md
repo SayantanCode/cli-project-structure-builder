@@ -1,4 +1,4 @@
-<img width="95px" align="right" alt="create-structure-cli" src="https://raw.githubusercontent.com/SayantanCode/cli-project-structure-builder/refs/heads/dev/assets/create-structure-cli-logo.png" title="create-structure-cli"/>
+<img width="95px" align="right" alt="create-structure-cli" src="/assets/create-structure-cli-logo.png" title="create-structure-cli"/>
 
 
 [![npm version](https://badge.fury.io/js/create-structure-cli.svg)](https://badge.fury.io/js/create-structure-cli)
