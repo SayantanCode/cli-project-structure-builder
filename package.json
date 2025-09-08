@@ -3,7 +3,7 @@
   "version": "1.0.1",
   "description": "Create a project structure from text or JSON input",
   "bin": {
-    "create-structure": "./cli.js"
+    "create-structure-cli": "./cli.js"
   },
   "type": "module",
   "scripts": {
