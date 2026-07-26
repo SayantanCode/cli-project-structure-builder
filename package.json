@@ -1,13 +1,24 @@
 {
   "name": "create-structure-cli",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Create a project structure from text or JSON input",
   "bin": {
-    "create-structure-cli": "./cli.js"
+    "create-structure": "./cli.js"
   },
   "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SayantanCode/cli-project-structure-builder.git"
+  },
+  "homepage": "https://github.com/SayantanCode/cli-project-structure-builder#readme",
+  "bugs": {
+    "url": "https://github.com/SayantanCode/cli-project-structure-builder/issues"
+  },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test"
   },
   "keywords": [
     "express boilerplate",

@@ -187,13 +187,23 @@ async function maybeInstallDependencies(outDir, packageJsonContent) {
         if (i % 5 === 0) seconds++;
       }, 200);
       const startTime = Date.now();
-      const exec = (await import("child_process")).exec;
-      exec(`cd ${outDir} && npm install`, (error) => {
+      const installProc = spawn("npm", ["install"], {
+        cwd: outDir,
+        shell: true,
+        stdio: "ignore",
+      });
+      installProc.on("error", (error) => {
+        clearInterval(interval);
+        process.stdout.write("\n");
+        log.error(`❌ Error installing dependencies: ${error.message}`);
+        process.exit(1);
+      });
+      installProc.on("close", (code) => {
         clearInterval(interval);
         const timeElapsed = Date.now() - startTime;
         process.stdout.write("\n"); // Move to next line after loader
-        if (error) {
-          log.error(`❌ Error installing dependencies: ${error.message}`);
+        if (code !== 0) {
+          log.error(`❌ Error installing dependencies: npm install exited with code ${code}`);
           process.exit(1);
         } else {
           log.success(
@@ -225,6 +235,28 @@ async function maybeInstallDependencies(outDir, packageJsonContent) {
  * Main entry point with Inquirer flow.
  */
 async function main() {
+  // Non-interactive fast path: `create-structure <file> [outputDir]`
+  // Keeps scripted/CI usage working without going through the menu.
+  if (process.argv.length > 2) {
+    const filePath = cleanPath(process.argv[2]);
+    const fileValidation = validateFile(filePath);
+    if (!fileValidation.valid) {
+      log.error(fileValidation.error);
+      process.exit(1);
+    }
+
+    const outDir =
+      process.argv.length > 3 ? cleanPath(process.argv[3]) : process.cwd();
+    const dirValidation = validateDirectory(outDir);
+    if (!dirValidation.valid) {
+      log.error(dirValidation.error);
+      process.exit(1);
+    }
+
+    await runCustomStructure(filePath, outDir);
+    return;
+  }
+
   log.custom(
   "\n✨ Welcome to Create-Structure-CLI! \n",
   "rgb(85, 254, 254).underline"
@@ -395,6 +427,15 @@ async function handleCustom() {
     process.exit(1);
   }
 
+  await runCustomStructure(filePath, outDir);
+}
+
+/**
+ * Creates a structure from an already-validated file path and output directory.
+ * Shared by the interactive "Custom Structure" flow and the non-interactive
+ * `create-structure <file> [outputDir]` argv fast path.
+ */
+async function runCustomStructure(filePath, outDir) {
   let packageJsonContent = null;
 
   // check if JSON and contains package.json
@@ -706,7 +747,7 @@ function createFromText(lines, basePath) {
       try {
         const cleanedLine = line.replace(/[├└│]/g, "");
         const depth = cleanedLine.search(/\S/);
-        const name = cleanedLine.trim().replace(/─ /, "");
+        const name = cleanedLine.trim().replace(/^─+\s*/, "");
 
         if (!name) {
           log.warn(`⚠️ Warning: Empty name at line ${index + 1}, skipping`);
