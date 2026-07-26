@@ -15,10 +15,11 @@ Quickly scaffold project directories, organize file structures, and set up devel
 ## ✨ Features
 
 - 📁 **Multiple Input Formats**: Support for both tree-style text files and JSON structure definitions
-- 🎯 **Interactive Mode**: Smart prompts when arguments are missing
+- ⚡️ **Built-in Boilerplates**: Scaffold React+Vite, Next.js (App/Pages Router), or Express+Mongoose projects, in JavaScript or TypeScript, from an interactive picker
+- 🔩 **Official Template Passthrough**: Jump straight into `create-vite`, `create-next-app`, `create-react-app`, Angular, Fastify, or Nest.js from the same menu
+- 🎯 **Interactive Mode**: A guided menu when run with no arguments; smart prompts when arguments are missing
 - 🛡️ **Robust Error Handling**: Comprehensive validation and user-friendly error messages
 - 🌍 **Cross-Platform**: Works on Windows(tested), macOS(test needed), and Linux(test needed)
-- ⚡ **Fast & Lightweight**: Minimal dependencies, pure Node.js
 - 🔄 **Flexible Paths**: Support for both absolute and relative paths
 - 📝 **Batch Operations**: Create complex nested structures in seconds
 
@@ -41,7 +42,7 @@ npx create-structure-cli
 
 ## 🚀 Quick Start
 ```bash
-# Interactive mode - get prompted for inputs
+# Interactive mode - choose Official Template, Built-in Boilerplate, or Custom Structure
 create-structure
 
 # Specify structure file only (default output directory is current directory)
@@ -54,6 +55,13 @@ create-structure ./project-structure.json
 # Specify both structure file and output directory - output directory will be created if it doesn't exist and no prompts will be shown
 create-structure ./structure.json ./my-new-project
 ```
+
+Running `create-structure` with no arguments opens an interactive menu:
+
+- **🔩 Official Template** — delegates to the framework's own official generator (`create-vite`, `create-next-app`, `create-react-app`, Angular CLI, Fastify CLI, Nest CLI)
+- **⚡️ Our Built-in Template** — scaffolds a ready-made boilerplate (React+Vite, Next.js App/Pages Router, Express+Mongoose), in JavaScript or TypeScript, with an optional automatic `npm install`
+- **📂 Custom Structure** — the tree-text / JSON structure flow described below
+
 ## 🚀 Usage
 ```bash
 create-structure [structure_file] [output_directory]
@@ -158,8 +166,8 @@ Create a .json file with your directory structure using JSON notation:
 
 ### Upcoming Features
 
-- many preset templates for boilerplate projects
-- support for YAML and other structure formats
+- More built-in boilerplates (Fastify, NestJS, fullstack, utility templates)
+- Support for YAML and other structure formats
 
 ## Contributing or Pull Requests
 
