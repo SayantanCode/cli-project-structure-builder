@@ -1,0 +1,7 @@
+{
+  "name": "Express + Mongoose (TypeScript)",
+  "description": "Express API with Mongoose, layered architecture (routes/controllers/services/repositories), Docker, Redis/BullMQ jobs.",
+  "category": "Backend",
+  "framework": "Express.js",
+  "language": "TypeScript"
+}

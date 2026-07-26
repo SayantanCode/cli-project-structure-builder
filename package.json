@@ -18,7 +18,7 @@
     "url": "https://github.com/SayantanCode/cli-project-structure-builder/issues"
   },
   "scripts": {
-    "test": "node --test"
+    "test": "node --test test/"
   },
   "keywords": [
     "express boilerplate",

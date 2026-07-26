@@ -1,11 +1,11 @@
 # Git & Config
-.git
-.gitignore
-.github
+/.git
+/.gitignore
+/.github
 
 # Dev-only files not needed at install time
-assets
-package-lock.json
-CHANGELOG.md
-test
-*.test.js
+/assets
+/package-lock.json
+/CHANGELOG.md
+/test
+/*.test.js

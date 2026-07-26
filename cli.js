@@ -7,17 +7,7 @@ import { spawn } from "child_process";
 import inquirer from "inquirer";
 import chalk from "chalk";
 //local modules
-import reactViteJsBoilerplate from "./templates/reactViteJsBoilerplate.js";
-import reactViteTsBoilerplate from "./templates/reactViteTsBoilerplate.js";
-import nextJsPagesRouterBoilerplate from "./templates/nextJsPageRouterBoilerplate.js";
-import nextJsAppRouterBoilerplate from "./templates/nextJsAppRouterBoilerplate.js";
-import nextJsTsPageRouterBoilerplate from "./templates/nextJsTsPageRouter.js";
-import nextJsTsAppRouterBoilerplate from "./templates/nextJsTsAppRouterBoilerplate.js";
-import expressMongooseJsBoilerplate from "./templates/expressMongooseJsBoilerplate.js";
-import expressMongooseTsBoilerplate from "./templates/expressMongooseTsBoilerplate.js";
-// import expressJsBoilerplate from "./templates/expressJsBoilerplate.js";
-// import fastifyBoilerplate from "./templates/fastifyBoilerplate.js";
-// import nestJsBoilerplate from "./templates/nestJsBoilerplate.js";
+import { instantiateTemplate } from "./lib/templateEngine.js";
 
 // create the log object with styled methods
 const log = {
@@ -61,35 +51,6 @@ const log = {
 //   "✨ Starting Create-Structure-CLI...",
 //   "rgb(85, 254, 254).underline"
 // );
-
-/**
- * Maping template keys to their corresponding boilerplate functions.
- * New templates can be added here as needed.
- */
-const TEMPLATES_MAP = {
-  "react-vite-js": reactViteJsBoilerplate,
-  "react-vite-ts": reactViteTsBoilerplate,
-  "next-js-app-ts": nextJsTsAppRouterBoilerplate,
-  "next-js-app-js": nextJsAppRouterBoilerplate,
-  "next-js-pages-ts": nextJsTsPageRouterBoilerplate,
-  "next-js-pages-js": nextJsPagesRouterBoilerplate,
-  "express-mongoose-js": expressMongooseJsBoilerplate,
-  "express-mongoose-ts": expressMongooseTsBoilerplate,
-  // "express-js": expressJsBoilerplate,
-  // "fastify-js": fastifyBoilerplate,
-  // "nestjs-ts": nestJsBoilerplate,
-};
-
-/**
- * Returns the boilerplate object for a given template key and project name.
- */
-function getBoilerplate(templateKey, projectName) {
-  const boilerplateFunc = TEMPLATES_MAP[templateKey];
-  if (!boilerplateFunc) {
-    throw new Error(`Template not found for key: ${templateKey}`);
-  }
-  return boilerplateFunc(projectName);
-}
 
 /**
  * Cleans a file path by removing surrounding quotes and resolving it to an absolute path.
@@ -635,21 +596,16 @@ async function handleTemplate() {
   }
 
   try {
-    const boilerplate = getBoilerplate(templateKey, answers.projectName);
-
     // Step 5: Create project
-    createFromJson(boilerplate, outDir);
+    instantiateTemplate(templateKey, outDir, { projectName: answers.projectName });
     log.success(`✅ Project created successfully at: ${outDir}`);
 
-    if (boilerplate["package.json"]) {
-      await maybeInstallDependencies(outDir, boilerplate["package.json"]);
+    const generatedPkgPath = path.join(outDir, "package.json");
+    if (fs.existsSync(generatedPkgPath)) {
+      await maybeInstallDependencies(outDir, fs.readFileSync(generatedPkgPath, "utf-8"));
     }
-
-    // console.log(
-    //   `🚀 %cHappy coding! To open in vs code type 'cd ${outDir} && code .'`, "color: magenta"
-    // );
   } catch (error) {
-    log.error(`❌ Error creating project:, ${error.message}`);
+    log.error(`❌ Error creating project: ${error.message}`);
     process.exit(1);
   }
 }
