@@ -496,6 +496,7 @@ async function handleTemplate() {
     ["variant", "a variant"],
     ["router", "a Next.js router"],
     ["language", "a language"],
+    ["rbac", "an access-control (RBAC) style"],
   ];
   for (const [dim, label] of remainingDimensions) {
     const values = uniqueValues(candidates, dim);
