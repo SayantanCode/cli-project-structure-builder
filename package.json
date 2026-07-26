@@ -18,7 +18,7 @@
     "url": "https://github.com/SayantanCode/cli-project-structure-builder/issues"
   },
   "scripts": {
-    "test": "node --test test/"
+    "test": "node --test test/cli.test.js test/templateEngine.test.js test/templateEngine.integration.test.js"
   },
   "keywords": [
     "express boilerplate",
@@ -38,6 +38,8 @@
   "license": "MIT",
   "dependencies": {
     "chalk": "^5.6.0",
-    "inquirer": "^12.9.3"
+    "degit": "^3.6.3",
+    "inquirer": "^12.9.3",
+    "ora": "^9.4.1"
   }
 }

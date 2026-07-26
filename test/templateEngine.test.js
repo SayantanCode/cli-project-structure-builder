@@ -4,13 +4,10 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import url from "node:url";
-import {
-  instantiateTemplate,
-  listTemplateKeys,
-  getTemplateManifest,
-} from "../lib/templateEngine.js";
+import { renderTemplate } from "../lib/templateEngine.js";
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
+const FIXTURES_DIR = path.join(__dirname, "fixtures", "templates");
 
 function makeTmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "template-engine-test-"));
@@ -26,84 +23,41 @@ function walkFiles(dir) {
   return results;
 }
 
-const EXPECTED_KEYS = [
-  "react-vite-js",
-  "react-vite-ts",
-  "next-js-app-js",
-  "next-js-app-ts",
-  "next-js-pages-js",
-  "next-js-pages-ts",
-  "express-mongoose-js",
-  "express-mongoose-ts",
-];
-
-test("listTemplateKeys finds all 8 built-in templates", () => {
-  const keys = listTemplateKeys().sort();
-  assert.deepEqual(keys, [...EXPECTED_KEYS].sort());
-});
-
-test("every built-in template has a manifest with required fields", () => {
-  for (const key of EXPECTED_KEYS) {
-    const manifest = getTemplateManifest(key);
-    assert.ok(manifest, `missing template.json for ${key}`);
-    for (const field of ["name", "description", "category", "framework", "language"]) {
-      assert.ok(manifest[field], `${key} manifest missing "${field}"`);
-    }
-  }
-});
-
-for (const key of EXPECTED_KEYS) {
-  test(`instantiateTemplate("${key}") substitutes projectName and writes real files`, () => {
-    const outDir = path.join(makeTmpDir(), "out");
-    instantiateTemplate(key, outDir, { projectName: "my-cool-app" });
-
-    const files = walkFiles(outDir);
-    assert.ok(files.length > 0, "no files were written");
-
-    const pkgPath = path.join(outDir, "package.json");
-    assert.ok(fs.existsSync(pkgPath), "package.json missing");
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
-    assert.equal(pkg.name, "my-cool-app");
-
-    for (const file of files) {
-      assert.notEqual(path.basename(file), "package-lock.json", `stale lockfile leaked into ${key}`);
-    }
-  });
-}
-
-test("no template leaks the raw {{projectName}} placeholder or [binary placeholder] text", () => {
-  const BINARY_EXTENSIONS = new Set([".ico", ".png", ".jpg", ".jpeg", ".gif"]);
-  for (const key of EXPECTED_KEYS) {
-    const outDir = path.join(makeTmpDir(), "out");
-    instantiateTemplate(key, outDir, { projectName: "acme-app" });
-
-    for (const file of walkFiles(outDir)) {
-      if (BINARY_EXTENSIONS.has(path.extname(file).toLowerCase())) continue;
-      const content = fs.readFileSync(file, "utf-8");
-      assert.doesNotMatch(content, /\{\{projectName\}\}/, `unsubstituted placeholder in ${file}`);
-      assert.doesNotMatch(content, /\[binary placeholder\]/, `placeholder text leaked into ${file}`);
-    }
-  }
-});
-
-test("next-js templates' favicon.ico is written as a real binary file, not placeholder text", () => {
-  for (const key of ["next-js-app-js", "next-js-app-ts", "next-js-pages-js"]) {
-    const outDir = path.join(makeTmpDir(), "out");
-    instantiateTemplate(key, outDir, { projectName: "acme-app" });
-
-    const favicon = walkFiles(outDir).find((f) => path.basename(f) === "favicon.ico");
-    assert.ok(favicon, `${key} should ship a favicon.ico`);
-
-    const buf = fs.readFileSync(favicon);
-    assert.ok(buf.length > 1000, `${key}'s favicon.ico looks like a placeholder (${buf.length} bytes)`);
-    assert.notEqual(buf.toString("utf-8", 0, 20), "[binary placeholder]");
-  }
-});
-
-test("instantiateTemplate throws a clear error for an unknown template key", () => {
+test("renderTemplate substitutes {{projectName}} in text files", () => {
+  const srcDir = path.join(FIXTURES_DIR, "fixture-basic", "files");
   const outDir = path.join(makeTmpDir(), "out");
-  assert.throws(
-    () => instantiateTemplate("does-not-exist", outDir, { projectName: "x" }),
-    /Template not found: does-not-exist/
+
+  renderTemplate(srcDir, outDir, { projectName: "my-cool-app" });
+
+  const pkg = JSON.parse(fs.readFileSync(path.join(outDir, "package.json"), "utf-8"));
+  assert.equal(pkg.name, "my-cool-app");
+
+  const readme = fs.readFileSync(path.join(outDir, "README.md"), "utf-8");
+  assert.match(readme, /^# my-cool-app/);
+
+  const indexJs = fs.readFileSync(path.join(outDir, "src", "index.js"), "utf-8");
+  assert.equal(indexJs.trim(), 'console.log("my-cool-app");');
+
+  assert.equal(walkFiles(outDir).length, 3);
+});
+
+test("renderTemplate copies binary files verbatim, without treating them as text", () => {
+  const srcDir = path.join(FIXTURES_DIR, "fixture-with-binary", "files");
+  const outDir = path.join(makeTmpDir(), "out");
+
+  renderTemplate(srcDir, outDir, { projectName: "acme-app" });
+
+  const srcBuf = fs.readFileSync(path.join(srcDir, "assets", "icon.ico"));
+  const outBuf = fs.readFileSync(path.join(outDir, "assets", "icon.ico"));
+
+  // Byte-for-byte identical — including the literal "{{projectName}}" bytes
+  // embedded in the fixture, which must NOT be substituted since it's binary.
+  assert.ok(srcBuf.equals(outBuf), "binary file should be copied byte-for-byte");
+});
+
+test("renderTemplate throws when the source directory doesn't exist", () => {
+  const outDir = path.join(makeTmpDir(), "out");
+  assert.throws(() =>
+    renderTemplate(path.join(FIXTURES_DIR, "does-not-exist"), outDir, { projectName: "x" })
   );
 });

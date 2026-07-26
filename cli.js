@@ -6,8 +6,9 @@ import { spawn } from "child_process";
 //external modules
 import inquirer from "inquirer";
 import chalk from "chalk";
+import ora from "ora";
 //local modules
-import { instantiateTemplate } from "./lib/templateEngine.js";
+import { instantiateTemplate, fetchTemplateIndex } from "./lib/templateEngine.js";
 
 // create the log object with styled methods
 const log = {
@@ -47,10 +48,6 @@ const log = {
     console.log(styledMessage(message));
   },
 };
-// log.custom(
-//   "✨ Starting Create-Structure-CLI...",
-//   "rgb(85, 254, 254).underline"
-// );
 
 /**
  * Cleans a file path by removing surrounding quotes and resolving it to an absolute path.
@@ -105,9 +102,57 @@ function validateDirectory(dirPath) {
 }
 
 /**
- * Shared helper → asks + installs dependencies if package.json has deps.
+ * If outDir already exists and has files in it, asks the user to confirm
+ * before scaffolding into it. Returns true if it's fine to proceed.
  */
-async function maybeInstallDependencies(outDir, packageJsonContent) {
+async function confirmOverwriteIfNeeded(outDir) {
+  if (!fs.existsSync(outDir) || !fs.statSync(outDir).isDirectory()) {
+    return true;
+  }
+  const contents = fs.readdirSync(outDir);
+  if (contents.length === 0) return true;
+
+  const { proceed } = await inquirer.prompt([
+    {
+      type: "confirm",
+      name: "proceed",
+      message: `Target directory "${outDir}" already has ${contents.length} item(s) in it. Continue anyway?`,
+      default: false,
+    },
+  ]);
+  return proceed;
+}
+
+const PROJECT_NAME_PATTERN = /^[a-z0-9][a-z0-9._-]*$/;
+
+/**
+ * Prompts for a project name, validated against npm package-name-shaped
+ * rules (so it can't produce an invalid "name" field in package.json).
+ */
+async function promptProjectName(message = "Enter project name:") {
+  const { projectName } = await inquirer.prompt([
+    {
+      type: "input",
+      name: "projectName",
+      message,
+      validate: (val) => {
+        const trimmed = (val || "").trim();
+        if (!trimmed) return "Project name is required";
+        if (!PROJECT_NAME_PATTERN.test(trimmed)) {
+          return "Use lowercase letters, numbers, hyphens, dots, or underscores, starting with a letter or number.";
+        }
+        return true;
+      },
+    },
+  ]);
+  return projectName.trim();
+}
+
+/**
+ * Shared helper → asks + installs dependencies if package.json has deps.
+ * devCommand (optional) is shown in the final "next steps" message.
+ */
+async function maybeInstallDependencies(outDir, packageJsonContent, devCommand) {
   try {
     const pkg = JSON.parse(packageJsonContent);
     const hasDeps =
@@ -125,67 +170,43 @@ async function maybeInstallDependencies(outDir, packageJsonContent) {
       },
     ]);
 
-    if (confirmDependenciesInstall) {
-      log.info("⚙️ Installing dependencies...");
-      // Loader animation while installing
-      const loaderChars = ["|", "/", "-", "\\"];
-      const dots = ["", ".", "..", "..."];
-      const spaces = ["   ", "  ", " ", ""];
-      let i = 0;
-      let seconds = 0;
+    const printNextSteps = () => {
+      const lines = [`cd ${outDir}`];
+      if (devCommand) lines.push(devCommand);
+      log.custom(`🚀 Next steps:\n   ${lines.join("\n   ")}`, "rgb(194, 156, 247).bold");
+    };
 
-      // Combined output for spinner and timer
-      const interval = setInterval(() => {
-        const spinner = loaderChars[i % loaderChars.length];
-        const dotStr = dots[i % dots.length];
-        const spaceStr = spaces[i % spaces.length];
-        process.stdout.clearLine();
-        process.stdout.cursorTo(0);
-        process.stdout.write(
-          `${spinner} Please wait${dotStr}${spaceStr}  ⏳ ${seconds} seconds elapsed`
-        );
-        i++;
-        if (i % 5 === 0) seconds++;
-      }, 200);
+    if (confirmDependenciesInstall) {
+      const spinner = ora("Installing dependencies...").start();
       const startTime = Date.now();
-      const installProc = spawn("npm", ["install"], {
-        cwd: outDir,
-        shell: true,
-        stdio: "ignore",
-      });
-      installProc.on("error", (error) => {
-        clearInterval(interval);
-        process.stdout.write("\n");
-        log.error(`❌ Error installing dependencies: ${error.message}`);
-        process.exit(1);
-      });
-      installProc.on("close", (code) => {
-        clearInterval(interval);
-        const timeElapsed = Date.now() - startTime;
-        process.stdout.write("\n"); // Move to next line after loader
-        if (code !== 0) {
-          log.error(`❌ Error installing dependencies: npm install exited with code ${code}`);
+
+      await new Promise((resolve) => {
+        const installProc = spawn("npm", ["install"], {
+          cwd: outDir,
+          shell: true,
+          stdio: "ignore",
+        });
+        installProc.on("error", (error) => {
+          spinner.fail(`Error installing dependencies: ${error.message}`);
           process.exit(1);
-        } else {
-          log.success(
-            `✅ Dependencies installed successfully within ${
-              timeElapsed / 1000
-            } seconds`
-          );
-          log.custom(
-            `🚀 Happy coding! To open in VS Code, type 'cd ${outDir} && code .'`,
-            "rgb(194, 156, 247).bold"
-          );
-        }
+        });
+        installProc.on("close", (code) => {
+          const timeElapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+          if (code !== 0) {
+            spinner.fail(`Error installing dependencies: npm install exited with code ${code}`);
+            process.exit(1);
+          } else {
+            spinner.succeed(`Dependencies installed in ${timeElapsed}s`);
+            printNextSteps();
+          }
+          resolve();
+        });
       });
     } else {
       log.warn(
         `⚠️ Remember to install dependencies manually. Run 'cd ${outDir} && npm install'`
       );
-      log.custom(
-        `🚀 Happy coding! To open in VS Code, type 'cd ${outDir} && code .'`,
-        "rgb(194, 156, 247).bold"
-      );
+      printNextSteps();
     }
   } catch {
     // ignore if parsing fails
@@ -219,13 +240,13 @@ async function main() {
   }
 
   log.custom(
-  "\n✨ Welcome to Create-Structure-CLI! \n",
-  "rgb(85, 254, 254).underline"
-);
-log.custom(
-  "🚀 Quickly scaffold your project structure with ease. 🚀 \n\n",
-  "rgb(85, 254, 254).italic"
-);
+    "\n✨ Welcome to Create-Structure-CLI! \n",
+    "rgb(85, 254, 254).underline"
+  );
+  log.custom(
+    "🚀 Quickly scaffold your project structure with ease. 🚀 \n\n",
+    "rgb(85, 254, 254).italic"
+  );
   try {
     const { mode } = await inquirer.prompt([
       {
@@ -233,8 +254,8 @@ log.custom(
         name: "mode",
         message: "What do you want to do?",
         choices: [
-          "🔩 Official Template( np* create-* )",
-          "⚡️ Our Built-in Template",
+          "🔩 Official Template (npx create-*)",
+          "⚡️ Built-in Boilerplate",
           "📂 Custom Structure",
         ],
       },
@@ -242,9 +263,9 @@ log.custom(
 
     if (mode === "📂 Custom Structure") {
       await handleCustom();
-    } else if (mode === "⚡️ Our Built-in Template") {
+    } else if (mode === "⚡️ Built-in Boilerplate") {
       await handleTemplate();
-    } else if (mode === "🔩 Official Template( np* create-* )") {
+    } else if (mode === "🔩 Official Template (npx create-*)") {
       await handleOfficial();
     }
   } catch (error) {
@@ -254,7 +275,6 @@ log.custom(
   return;
 }
 
-// Helper: run official commands
 /**
  * Runs a command with arguments in a given directory.
  * @param {string} cmd - The command to run.
@@ -264,12 +284,22 @@ log.custom(
  */
 function runCommand(cmd, args, cwd) {
   return new Promise((resolve, reject) => {
-    const proc = spawn(cmd, args, { stdio: "inherit", cwd, shell: true }); // need to research more on this
+    const proc = spawn(cmd, args, { stdio: "inherit", cwd, shell: true });
     proc.on("close", (code) =>
       code === 0 ? resolve() : reject(new Error(`${cmd} failed`))
     );
   });
 }
+
+// Dev command shown in the "next steps" message per official framework.
+const OFFICIAL_DEV_COMMANDS = {
+  "React (CRA)": "npm start",
+  Vite: "npm run dev",
+  "Next.js": "npm run dev",
+  Angular: "npm start",
+  Fastify: "npm start",
+  "Nest.js": "npm run start:dev",
+};
 
 /**
  * Handle flow for official templates.
@@ -285,21 +315,20 @@ async function handleOfficial() {
         "Vite",
         "Next.js",
         "Angular",
-        // "Express",
         "Fastify",
         "Nest.js",
       ],
     },
   ]);
 
-  const { projectName } = await inquirer.prompt([
-    {
-      type: "input",
-      name: "projectName",
-      message: "Enter project name:",
-      validate: (val) => (val ? true : "Project name is required"),
-    },
-  ]);
+  const projectName = await promptProjectName();
+
+  const outDir = path.join(process.cwd(), projectName);
+  const canProceed = await confirmOverwriteIfNeeded(outDir);
+  if (!canProceed) {
+    log.warn("⚠️ Aborted — target directory not empty.");
+    return;
+  }
 
   log.info(`⚙️ Setting up ${framework} project...`);
 
@@ -324,11 +353,7 @@ async function handleOfficial() {
         ["-p", "@angular/cli", "ng", "new", projectName],
         process.cwd()
       );
-    }
-    // else if (framework === "Express") {
-    //   await runCommand("npx", ["express-generator", projectName], process.cwd());
-    // }
-    else if (framework === "Fastify") {
+    } else if (framework === "Fastify") {
       await runCommand(
         "npx",
         ["fastify-cli", "generate", projectName],
@@ -342,15 +367,15 @@ async function handleOfficial() {
       );
     }
     log.success(`✅ ${framework} project created at ${projectName}`);
+    const devCommand = OFFICIAL_DEV_COMMANDS[framework];
     log.custom(
-      `🚀 Happy coding! To open in VS Code, type 'cd ${projectName} && code .'`,
+      `🚀 Next steps:\n   cd ${projectName}${devCommand ? `\n   ${devCommand}` : ""}`,
       "rgb(194, 156, 247).bold"
     );
   } catch (err) {
     log.error(`❌ Failed to create ${framework} project: ${err.message}`);
     process.exit(1);
   }
-  // log.info(`🚀 Happy coding! To open in VS Code, type 'cd ${projectName} && code .'`);
   return;
 }
 
@@ -419,138 +444,87 @@ async function runCustomStructure(filePath, outDir) {
   }
 }
 
+function uniqueValues(list, key) {
+  return [...new Set(list.map((item) => item[key]).filter(Boolean))];
+}
+
 /**
- * Flow for built-in templates (refactored with categories).
+ * Flow for built-in templates. Fully data-driven: the category/framework/
+ * variant/language prompts (and the final set of choices at each step) come
+ * from the fetched template registry index, not hardcoded lists — so adding
+ * a template to the registry never requires touching this function.
  */
 async function handleTemplate() {
-  const answers = {};
+  let index;
+  const indexSpinner = ora("Fetching template registry...").start();
+  try {
+    index = await fetchTemplateIndex();
+    indexSpinner.stop();
+  } catch (error) {
+    indexSpinner.fail(error.message);
+    process.exit(1);
+  }
 
-  // Step 1: Choose Category
+  if (!index || index.length === 0) {
+    log.warn("⚠️ No built-in templates are available right now.");
+    return;
+  }
+
+  let candidates = index;
+
   const { category } = await inquirer.prompt([
     {
       type: "list",
       name: "category",
       message: "Choose a project category:",
-      choices: ["Frontend", "Backend", "Fullstack", "Utility"],
+      choices: uniqueValues(candidates, "category"),
     },
   ]);
-  answers.category = category;
+  candidates = candidates.filter((t) => t.category === category);
 
-  let questions = [];
-  if (category === "Frontend") {
-    questions = [
-      {
-        type: "list",
-        name: "framework",
-        message: "Choose a framework:",
-        choices: ["React", "Next.js", "Vue"],
-      },
-    ];
-  } else if (category === "Backend") {
-    questions = [
-      {
-        type: "list",
-        name: "framework",
-        message: "Choose a framework:",
-        choices: ["Express.js", "Fastify", "NestJS"],
-      },
-    ];
-  } else if (category === "Fullstack") {
-    log.warn("⚠️ Fullstack templates are coming soon!");
-    return;
-  } else if (category === "Utility") {
-    log.warn("⚠️ Utility templates are coming soon!");
-    return;
-  } else {
-    log.warn("⚠️ This category is not implemented yet. Coming soon!");
-    return;
-  }
-
-  const frameworkAnswer = await inquirer.prompt(questions);
-  Object.assign(answers, frameworkAnswer);
-
-  if (answers.framework === "React") {
-    const reactAnswers = await inquirer.prompt([
-      {
-        type: "list",
-        name: "variant",
-        message: "Choose a React variant:",
-        choices: ["Vite"],
-      },
-      {
-        type: "list",
-        name: "language",
-        message: "Choose a language:",
-        choices: ["JavaScript", "TypeScript"],
-      },
-    ]);
-    Object.assign(answers, reactAnswers);
-  } else if (answers.framework === "Next.js") {
-    const nextAnswers = await inquirer.prompt([
-      {
-        type: "list",
-        name: "language",
-        message: "Choose a language:",
-        choices: ["JavaScript", "TypeScript"],
-      },
-      {
-        type: "list",
-        name: "router",
-        message: "Choose a Next.js router:",
-        choices: ["App Router", "Pages Router"],
-      },
-    ]);
-    Object.assign(answers, nextAnswers);
-  } else if (answers.framework === "Express.js") {
-    const expressAnswers = await inquirer.prompt([
-      {
-        type: "list",
-        name: "variant",
-        message:
-          "Choose a variant (Beginner's to Moderate Devs please choose 'Simple'):",
-        choices: ["Mongoose (Advanced/Pro Devs)", "Simple"],
-      },
-      {
-        type: "list",
-        name: "language",
-        message: "Choose a language:",
-        choices: ["JavaScript", "TypeScript"],
-      },
-    ]);
-    Object.assign(answers, expressAnswers);
-  } else if (answers.framework === "NestJS") {
-    const nestAnswers = await inquirer.prompt([
-      {
-        type: "list",
-        name: "language",
-        message: "Choose a language:",
-        choices: ["TypeScript"],
-      },
-    ]);
-    Object.assign(answers, nestAnswers);
-  } else if (answers.framework === "Fastify") {
-    const fastifyAnswers = await inquirer.prompt([
-      {
-        type: "list",
-        name: "language",
-        message: "Choose a language:",
-        choices: ["JavaScript", "TypeScript"],
-      },
-    ]);
-    Object.assign(answers, fastifyAnswers);
-  } else {
-    log.warn(`⚠️ Template for ${answers.framework} is not implemented yet.`);
-    return;
-  }
-
-  // Step 3: Ask for project name, output directory
-  const { projectName, outputBase } = await inquirer.prompt([
+  const { framework } = await inquirer.prompt([
     {
-      type: "input",
-      name: "projectName",
-      message: "Enter project name:",
-      validate: (val) => (val ? true : "Project name is required"),
+      type: "list",
+      name: "framework",
+      message: "Choose a framework:",
+      choices: uniqueValues(candidates, "framework"),
     },
+  ]);
+  candidates = candidates.filter((t) => t.framework === framework);
+
+  const remainingDimensions = [
+    ["variant", "a variant"],
+    ["router", "a Next.js router"],
+    ["language", "a language"],
+  ];
+  for (const [dim, label] of remainingDimensions) {
+    const values = uniqueValues(candidates, dim);
+    if (values.length > 1) {
+      const answer = await inquirer.prompt([
+        {
+          type: "list",
+          name: dim,
+          message: `Choose ${label}:`,
+          choices: values,
+        },
+      ]);
+      candidates = candidates.filter((t) => t[dim] === answer[dim]);
+    }
+  }
+
+  if (candidates.length !== 1) {
+    log.error(
+      candidates.length === 0
+        ? "❌ No template matches that combination."
+        : "❌ That combination matches more than one template — the registry has ambiguous data."
+    );
+    process.exit(1);
+  }
+
+  const template = candidates[0];
+
+  const projectName = await promptProjectName();
+  const { outputBase } = await inquirer.prompt([
     {
       type: "input",
       name: "outputBase",
@@ -558,12 +532,16 @@ async function handleTemplate() {
         "Enter output directory (leave empty to create a new folder with the project name):",
     },
   ]);
-  answers.projectName = projectName;
-  answers.outputBase = outputBase;
 
-  const outDir = answers.outputBase.trim()
-    ? cleanPath(answers.outputBase)
-    : path.join(process.cwd(), answers.projectName);
+  const outDir = outputBase.trim()
+    ? cleanPath(outputBase)
+    : path.join(process.cwd(), projectName);
+
+  const canProceed = await confirmOverwriteIfNeeded(outDir);
+  if (!canProceed) {
+    log.warn("⚠️ Aborted — target directory not empty.");
+    return;
+  }
 
   const dirValidation = validateDirectory(outDir);
   if (!dirValidation.valid) {
@@ -571,42 +549,22 @@ async function handleTemplate() {
     process.exit(1);
   }
 
-  // Step 4: Construct the template key and get the boilerplate
-  let templateKey = "";
-  if (answers.framework === "React") {
-    templateKey = `react-${answers.variant.toLowerCase()}-${
-      answers.language.toLowerCase().startsWith("type") ? "ts" : "js"
-    }`;
-  } else if (answers.framework === "Next.js") {
-    templateKey = `next-js-${answers.router.split(" ")[0].toLowerCase()}-${
-      answers.language.toLowerCase().startsWith("type") ? "ts" : "js"
-    }`;
-  } else if (answers.framework === "Express.js") {
-    templateKey = `express-${answers.variant.split(" ")[0].toLowerCase()}-${
-      answers.language.toLowerCase().startsWith("type") ? "ts" : "js"
-    }`;
-  } else if (answers.framework === "NestJS") {
-    templateKey = `nestjs-${
-      answers.language.toLowerCase().startsWith("type") ? "ts" : "js"
-    }`;
-  } else if (answers.framework === "Fastify") {
-    templateKey = `fastify-${
-      answers.language.toLowerCase().startsWith("type") ? "ts" : "js"
-    }`;
+  const spinner = ora(`Fetching ${template.name}...`).start();
+  try {
+    await instantiateTemplate(template.key, outDir, { projectName });
+    spinner.succeed(`Project created at: ${outDir}`);
+  } catch (error) {
+    spinner.fail(`Error creating project: ${error.message}`);
+    process.exit(1);
   }
 
-  try {
-    // Step 5: Create project
-    instantiateTemplate(templateKey, outDir, { projectName: answers.projectName });
-    log.success(`✅ Project created successfully at: ${outDir}`);
-
-    const generatedPkgPath = path.join(outDir, "package.json");
-    if (fs.existsSync(generatedPkgPath)) {
-      await maybeInstallDependencies(outDir, fs.readFileSync(generatedPkgPath, "utf-8"));
-    }
-  } catch (error) {
-    log.error(`❌ Error creating project: ${error.message}`);
-    process.exit(1);
+  const generatedPkgPath = path.join(outDir, "package.json");
+  if (fs.existsSync(generatedPkgPath)) {
+    await maybeInstallDependencies(
+      outDir,
+      fs.readFileSync(generatedPkgPath, "utf-8"),
+      template.devCommand
+    );
   }
 }
 
