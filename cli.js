@@ -602,19 +602,23 @@ async function handleComposeBackend() {
     process.exit(1);
   }
 
-  let baseKey;
+  let base;
   if (index.bases.length === 1) {
-    baseKey = index.bases[0];
+    base = index.bases[0];
   } else {
-    const answer = await inquirer.prompt([
-      { type: "list", name: "baseKey", message: "Choose a base:", choices: index.bases },
+    const { baseName } = await inquirer.prompt([
+      {
+        type: "list",
+        name: "baseName",
+        message: "Choose a base:",
+        choices: index.bases.map((b) => b.name),
+      },
     ]);
-    baseKey = answer.baseKey;
+    base = index.bases.find((b) => b.name === baseName);
   }
 
-  // Phase 4a: Express + ESM only. TypeScript/CommonJS targets are a
-  // follow-up phase — see the module registry's "languages" field.
-  const language = "esm";
+  const baseKey = base.key;
+  const language = base.language;
 
   const modulesByDimension = {};
   for (const mod of index.modules) {
