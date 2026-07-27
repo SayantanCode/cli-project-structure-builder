@@ -619,10 +619,12 @@ async function handleComposeBackend() {
 
   const baseKey = base.key;
   const language = base.language;
+  const framework = base.framework;
 
   const modulesByDimension = {};
   for (const mod of index.modules) {
     if (!mod.languages.includes(language)) continue;
+    if (mod.framework !== "any" && mod.framework !== framework) continue;
     (modulesByDimension[mod.dimension] ||= []).push(mod);
   }
 
