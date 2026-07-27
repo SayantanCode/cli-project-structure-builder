@@ -9,6 +9,7 @@ import chalk from "chalk";
 import ora from "ora";
 //local modules
 import { instantiateTemplate, fetchTemplateIndex } from "./lib/templateEngine.js";
+import { composeBackend, fetchComposerIndex } from "./lib/composer.js";
 
 // create the log object with styled methods
 const log = {
@@ -256,6 +257,7 @@ async function main() {
         choices: [
           "🔩 Official Template (npx create-*)",
           "⚡️ Built-in Boilerplate",
+          "🧩 Compose a Backend",
           "📂 Custom Structure",
         ],
       },
@@ -265,6 +267,8 @@ async function main() {
       await handleCustom();
     } else if (mode === "⚡️ Built-in Boilerplate") {
       await handleTemplate();
+    } else if (mode === "🧩 Compose a Backend") {
+      await handleComposeBackend();
     } else if (mode === "🔩 Official Template (npx create-*)") {
       await handleOfficial();
     }
@@ -565,6 +569,125 @@ async function handleTemplate() {
       outDir,
       fs.readFileSync(generatedPkgPath, "utf-8"),
       template.devCommand
+    );
+  }
+}
+
+// Order dimensions are asked in, with their prompt message. RBAC is only
+// ever shown if a module it depends on (auth) was actually selected — see
+// the availability filter below.
+const COMPOSER_DIMENSIONS = [
+  ["database", "Choose a database:"],
+  ["validation", "Choose a validation library:"],
+  ["auth", "Choose an auth style:"],
+  ["rbac", "Choose an access-control (RBAC) style:"],
+  ["testing", "Choose a testing library:"],
+];
+
+/**
+ * Flow for the composable backend generator: instead of picking one of a
+ * fixed set of complete templates, each answer here selects an independent
+ * module (or none) that the composer assembles into the final project.
+ * Entirely data-driven from the fetched composer index — a new module shows
+ * up here automatically, no cli.js changes needed.
+ */
+async function handleComposeBackend() {
+  const indexSpinner = ora("Fetching composer registry...").start();
+  let index;
+  try {
+    index = await fetchComposerIndex();
+    indexSpinner.stop();
+  } catch (error) {
+    indexSpinner.fail(error.message);
+    process.exit(1);
+  }
+
+  let baseKey;
+  if (index.bases.length === 1) {
+    baseKey = index.bases[0];
+  } else {
+    const answer = await inquirer.prompt([
+      { type: "list", name: "baseKey", message: "Choose a base:", choices: index.bases },
+    ]);
+    baseKey = answer.baseKey;
+  }
+
+  // Phase 4a: Express + ESM only. TypeScript/CommonJS targets are a
+  // follow-up phase — see the module registry's "languages" field.
+  const language = "esm";
+
+  const modulesByDimension = {};
+  for (const mod of index.modules) {
+    if (!mod.languages.includes(language)) continue;
+    (modulesByDimension[mod.dimension] ||= []).push(mod);
+  }
+
+  const selected = {};
+  for (const [dimension, message] of COMPOSER_DIMENSIONS) {
+    const candidates = modulesByDimension[dimension] || [];
+    if (candidates.length === 0) continue;
+
+    const available = candidates.filter((mod) =>
+      (mod.dependsOn || []).every((dep) => selected[dep])
+    );
+    if (available.length === 0) continue;
+
+    const { choice } = await inquirer.prompt([
+      {
+        type: "list",
+        name: "choice",
+        message,
+        choices: [...available.map((mod) => mod.name), "None"],
+      },
+    ]);
+    if (choice === "None") continue;
+
+    const mod = available.find((m) => m.name === choice);
+    selected[mod.key] = mod;
+  }
+
+  const moduleKeys = Object.keys(selected);
+
+  const projectName = await promptProjectName();
+  const { outputBase } = await inquirer.prompt([
+    {
+      type: "input",
+      name: "outputBase",
+      message:
+        "Enter output directory (leave empty to create a new folder with the project name):",
+    },
+  ]);
+  const outDir = outputBase.trim()
+    ? cleanPath(outputBase)
+    : path.join(process.cwd(), projectName);
+
+  const canProceed = await confirmOverwriteIfNeeded(outDir);
+  if (!canProceed) {
+    log.warn("⚠️ Aborted — target directory not empty.");
+    return;
+  }
+
+  const dirValidation = validateDirectory(outDir);
+  if (!dirValidation.valid) {
+    log.error(dirValidation.error);
+    process.exit(1);
+  }
+
+  const spinner = ora("Composing backend...").start();
+  try {
+    await composeBackend({ baseKey, moduleKeys, language, outDir, vars: { projectName } });
+    spinner.succeed(`Project created at: ${outDir}`);
+  } catch (error) {
+    spinner.fail(`Error composing project: ${error.message}`);
+    process.exit(1);
+  }
+
+  const generatedPkgPath = path.join(outDir, "package.json");
+  if (fs.existsSync(generatedPkgPath)) {
+    await maybeInstallDependencies(
+      outDir,
+      fs.readFileSync(generatedPkgPath, "utf-8"),
+      "npm run dev"
     );
   }
 }
