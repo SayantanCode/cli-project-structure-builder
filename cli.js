@@ -582,6 +582,8 @@ const COMPOSER_DIMENSIONS = [
   ["auth", "Choose an auth style:"],
   ["rbac", "Choose an access-control (RBAC) style:"],
   ["testing", "Choose a testing library:"],
+  ["docker", "Add Docker support?"],
+  ["ci", "Add CI (GitHub Actions)?"],
 ];
 
 /**
