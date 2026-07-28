@@ -579,6 +579,9 @@ async function handleTemplate() {
 const COMPOSER_DIMENSIONS = [
   ["database", "Choose a database:"],
   ["validation", "Choose a validation library:"],
+  ["routing", "Choose a routing library:"],
+  ["styling", "Choose a styling approach:"],
+  ["state", "Choose a state management library:"],
   ["auth", "Choose an auth style:"],
   ["rbac", "Choose an access-control (RBAC) style:"],
   ["testing", "Choose a testing library:"],
