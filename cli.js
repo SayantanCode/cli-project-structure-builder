@@ -573,14 +573,15 @@ async function handleTemplate() {
   }
 }
 
-// Order dimensions are asked in, with their prompt message. RBAC is only
-// ever shown if a module it depends on (auth) was actually selected — see
-// the availability filter below.
+// Order dimensions are asked in, with their prompt message and (optionally)
+// which module name should be pre-highlighted as the default choice. RBAC is
+// only ever shown if a module it depends on (auth) was actually selected —
+// see the availability filter below.
 const COMPOSER_DIMENSIONS = [
   ["database", "Choose a database:"],
   ["validation", "Choose a validation library:"],
   ["routing", "Choose a routing library:"],
-  ["styling", "Choose a styling approach:"],
+  ["styling", "Choose a styling approach:", "Tailwind CSS"],
   ["state", "Choose a state management library:"],
   ["auth", "Choose an auth style:"],
   ["rbac", "Choose an access-control (RBAC) style:"],
@@ -634,7 +635,7 @@ async function handleComposeBackend() {
   }
 
   const selected = {};
-  for (const [dimension, message] of COMPOSER_DIMENSIONS) {
+  for (const [dimension, message, defaultName] of COMPOSER_DIMENSIONS) {
     const candidates = modulesByDimension[dimension] || [];
     if (candidates.length === 0) continue;
 
@@ -643,14 +644,13 @@ async function handleComposeBackend() {
     );
     if (available.length === 0) continue;
 
-    const { choice } = await inquirer.prompt([
-      {
-        type: "list",
-        name: "choice",
-        message,
-        choices: [...available.map((mod) => mod.name), "None"],
-      },
-    ]);
+    const choices = [...available.map((mod) => mod.name), "None"];
+    const prompt = { type: "list", name: "choice", message, choices };
+    if (defaultName && choices.includes(defaultName)) {
+      prompt.default = defaultName;
+    }
+
+    const { choice } = await inquirer.prompt([prompt]);
     if (choice === "None") continue;
 
     const mod = available.find((m) => m.name === choice);
