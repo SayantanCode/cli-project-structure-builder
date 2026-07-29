@@ -782,8 +782,11 @@ function createFromText(lines, basePath) {
     const firstLine = lines[0].trim();
 
     if (firstLine.endsWith("/")) {
+      // Anchored (^) so this only strips leading tree-drawing chars/ASCII
+      // dashes, never a hyphen that's actually part of the folder's own
+      // name (e.g. "my-app/") — a global strip here would mangle those.
       const rootFolderName = firstLine
-        .replace(/[├└│─ ]/g, "")
+        .replace(/^[├└│─\-\s]+/, "")
         .replace(/\/$/, "");
       const rootPath = path.join(basePath, rootFolderName);
       fs.mkdirSync(rootPath, { recursive: true });
@@ -796,7 +799,11 @@ function createFromText(lines, basePath) {
       try {
         const cleanedLine = line.replace(/[├└│]/g, "");
         const depth = cleanedLine.search(/\S/);
-        const name = cleanedLine.trim().replace(/^─+\s*/, "");
+        // Matches the box-drawing dash (─) *and* plain ASCII hyphens typed
+        // by hand ("--", "- ", etc.) — previously only ─ was stripped, so
+        // a hand-typed "-- filename" tree left a literal "-- " stuck to
+        // every name.
+        const name = cleanedLine.trim().replace(/^[─\-]+\s*/, "");
 
         if (!name) {
           log.warn(`⚠️ Warning: Empty name at line ${index + 1}, skipping`);
