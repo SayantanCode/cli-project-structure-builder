@@ -10,6 +10,7 @@ import ora from "ora";
 //local modules
 import { instantiateTemplate, fetchTemplateIndex } from "./lib/templateEngine.js";
 import { composeBackend, fetchComposerIndex } from "./lib/composer.js";
+import { parseGitHubUrl, fetchGitHubTree, writeGitHubStructure } from "./lib/githubSource.js";
 
 // create the log object with styled methods
 const log = {
@@ -387,6 +388,20 @@ async function handleOfficial() {
  * Flow for custom structure.
  */
 async function handleCustom() {
+  const { source } = await inquirer.prompt([
+    {
+      type: "list",
+      name: "source",
+      message: "Where is your structure coming from?",
+      choices: ["📁 Local file", "🐙 GitHub repository"],
+    },
+  ]);
+
+  if (source === "🐙 GitHub repository") {
+    await handleCustomFromGitHub();
+    return;
+  }
+
   const { inputFilePath } = await inquirer.prompt([
     {
       type: "input",
@@ -418,6 +433,126 @@ async function handleCustom() {
   }
 
   await runCustomStructure(filePath, outDir);
+}
+
+/**
+ * Custom-structure flow sourced from a public GitHub repo (or a subfolder
+ * within one) instead of a local file. Uses GitHub's tree API for a single
+ * listing call, then either writes empty files (structure only) or fetches
+ * real content per file from raw.githubusercontent.com.
+ */
+async function handleCustomFromGitHub() {
+  const { githubUrl } = await inquirer.prompt([
+    {
+      type: "input",
+      name: "githubUrl",
+      message: "Enter the GitHub repo URL (optionally .../tree/<branch>/<subpath>):",
+    },
+  ]);
+
+  const parsed = parseGitHubUrl(githubUrl);
+  if (!parsed) {
+    log.error(
+      "❌ Could not parse that as a GitHub URL. Expected something like https://github.com/owner/repo or https://github.com/owner/repo/tree/branch/path."
+    );
+    process.exit(1);
+  }
+
+  const { includeContents } = await inquirer.prompt([
+    {
+      type: "list",
+      name: "includeContents",
+      message: "What should be created?",
+      choices: [
+        { name: "📂 Structure only (empty files/folders)", value: false },
+        { name: "📄 Structure + real file contents", value: true },
+      ],
+    },
+  ]);
+
+  const fetchSpinner = ora(`Fetching structure from ${parsed.owner}/${parsed.repo}...`).start();
+  let tree;
+  try {
+    tree = await fetchGitHubTree(parsed);
+    fetchSpinner.stop();
+  } catch (error) {
+    fetchSpinner.fail(error.message);
+    process.exit(1);
+  }
+
+  if (tree.truncated) {
+    log.warn(
+      "⚠️ GitHub truncated this listing (the repo/subfolder is very large) — some deeply nested files may be missing."
+    );
+  }
+
+  const fileCount = tree.entries.filter((entry) => entry.type === "blob").length;
+  if (fileCount === 0) {
+    log.error("❌ No files found at that location.");
+    process.exit(1);
+  }
+
+  if (fileCount > 300) {
+    const { proceedLarge } = await inquirer.prompt([
+      {
+        type: "confirm",
+        name: "proceedLarge",
+        message: `This will create ${fileCount} files${
+          includeContents ? " and fetch all their contents" : ""
+        }. Continue?`,
+        default: false,
+      },
+    ]);
+    if (!proceedLarge) {
+      log.info("Cancelled.");
+      return;
+    }
+  }
+
+  const { outputBase } = await inquirer.prompt([
+    {
+      type: "input",
+      name: "outputBase",
+      message: "Enter output directory (leave empty for current directory):",
+    },
+  ]);
+
+  const outDir = outputBase.trim() ? cleanPath(outputBase) : process.cwd();
+  const dirValidation = validateDirectory(outDir);
+  if (!dirValidation.valid) {
+    log.error(dirValidation.error);
+    process.exit(1);
+  }
+
+  const canProceed = await confirmOverwriteIfNeeded(outDir);
+  if (!canProceed) {
+    log.info("Cancelled.");
+    return;
+  }
+
+  const writeSpinner = ora(
+    includeContents ? `Fetching ${fileCount} file(s)...` : `Creating ${fileCount} file(s)...`
+  ).start();
+  let result;
+  try {
+    result = await writeGitHubStructure({
+      owner: parsed.owner,
+      repo: parsed.repo,
+      branch: tree.branch,
+      entries: tree.entries,
+      outDir,
+      includeContents,
+    });
+    writeSpinner.stop();
+  } catch (error) {
+    writeSpinner.fail(error.message);
+    process.exit(1);
+  }
+
+  log.success(`✅ Structure created successfully at: ${outDir}`);
+  if (result.failures > 0) {
+    log.warn(`⚠️ ${result.failures} file(s) could not be fetched and were created empty instead.`);
+  }
 }
 
 /**

@@ -60,7 +60,7 @@ Running `create-structure` with no arguments opens an interactive menu:
 
 - **🔩 Official Template** — delegates to the framework's own official generator (`create-vite`, `create-next-app`, `create-react-app`, Angular CLI, Fastify CLI, Nest CLI)
 - **⚡️ Our Built-in Template** — scaffolds a ready-made boilerplate (React+Vite, Next.js App/Pages Router, Express+Mongoose), in JavaScript or TypeScript, with an optional automatic `npm install`
-- **📂 Custom Structure** — the tree-text / JSON structure flow described below
+- **📂 Custom Structure** — the tree-text / JSON structure flow described below, sourced from either a local file or a public GitHub repo URL
 
 ## 🚀 Usage
 ```bash
@@ -163,6 +163,22 @@ Create a .json file with your directory structure using JSON notation:
 - String values represent file content
 - Empty strings create empty files
 - Nested objects create nested directories
+
+## 🐙 Custom Structure from a GitHub Repo
+
+Instead of a local file, the **Custom Structure** flow also accepts a public GitHub repo URL — the repo root, or a `/tree/<branch>/<subpath>` URL for a specific folder:
+
+```text
+https://github.com/owner/repo
+https://github.com/owner/repo/tree/main/some/subfolder
+```
+
+After fetching the tree, you choose what actually gets created:
+
+- **Structure only** — every file becomes an empty file (folders included), just the shape of the repo — handy for using someone else's project layout as a starting point without pulling in their actual code.
+- **Structure + real file contents** — fetches every file's real content too.
+
+This only works for public repos (no auth token support yet), uses a single GitHub API call to list the whole tree, and fetches file contents (when requested) from `raw.githubusercontent.com` to avoid GitHub's stricter API rate limit.
 
 ### Upcoming Features
 
