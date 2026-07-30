@@ -304,6 +304,7 @@ async function main() {
           "🔩 Official Template (npx create-*)",
           "⚡️ Built-in Boilerplate",
           "🧩 Compose a Project (Backend or Frontend)",
+          "🧩🧩 Compose a Full-Stack App (Backend + Frontend)",
           "📂 Custom Structure",
         ],
       },
@@ -315,6 +316,8 @@ async function main() {
       await handleTemplate();
     } else if (mode === "🧩 Compose a Project (Backend or Frontend)") {
       await handleComposeBackend();
+    } else if (mode === "🧩🧩 Compose a Full-Stack App (Backend + Frontend)") {
+      await handleComposeFullStack();
     } else if (mode === "🔩 Official Template (npx create-*)") {
       await handleOfficial();
     }
@@ -817,10 +820,164 @@ function printComposerRegistry(index) {
 }
 
 /**
+ * Flag-driven equivalent of promptModuleSelection(): resolves module
+ * selections for one base from `--<prefix><dimension>=<key>` flags,
+ * honoring dependsOn requirements the same way the interactive prompt does.
+ * `prefix` namespaces the flag keys ("backend:"/"frontend:" for --fullstack,
+ * "" for the single-target command) so the same dimension name (auth,
+ * testing) can be answered independently on each side without colliding.
+ */
+function resolveModulesFromFlags(index, base, flags, prefix = "") {
+  const { language, framework } = base;
+
+  const modulesByDimension = {};
+  for (const mod of index.modules) {
+    if (!mod.languages.includes(language)) continue;
+    if (mod.framework !== "any" && mod.framework !== framework) continue;
+    (modulesByDimension[mod.dimension] ||= []).push(mod);
+  }
+
+  const selected = {};
+  for (const [dimension] of COMPOSER_DIMENSIONS) {
+    const flagKey = `${prefix}${dimension}`;
+    const flagValue = flags[flagKey];
+    if (!flagValue || flagValue === true) continue;
+
+    const candidates = modulesByDimension[dimension] || [];
+    const mod = candidates.find((m) => m.key === flagValue);
+    if (!mod) {
+      const validKeys = candidates.map((m) => m.key).join(", ") || "(none available for this base)";
+      log.error(
+        `❌ Unknown or unavailable module "${flagValue}" for --${flagKey}. Valid options: ${validKeys}`
+      );
+      process.exit(1);
+    }
+
+    const missingDeps = (mod.dependsOn || []).filter((dep) => !selected[dep]);
+    if (missingDeps.length > 0) {
+      log.error(
+        `❌ --${flagKey}=${flagValue} requires ${missingDeps.join(", ")} to also be selected.`
+      );
+      process.exit(1);
+    }
+
+    selected[mod.key] = mod;
+  }
+
+  return selected;
+}
+
+/**
+ * Non-interactive full-stack composer: `create-structure compose --fullstack
+ * --backend=<key> --frontend=<key> --backend:<dim>=<key> --frontend:<dim>=<key>
+ * --name=... `. Mirrors handleComposeFullStack()'s logic (one repo, backend/
+ * + frontend/ subfolders, shared README) but takes every answer from flags.
+ */
+async function runFullStackNonInteractive(index, flags) {
+  if (!flags.backend || flags.backend === true) {
+    log.error("❌ --backend=<key> is required with --fullstack. Run `create-structure compose --list`.");
+    process.exit(1);
+  }
+  if (!flags.frontend || flags.frontend === true) {
+    log.error("❌ --frontend=<key> is required with --fullstack. Run `create-structure compose --list`.");
+    process.exit(1);
+  }
+
+  const backendBase = index.bases.find((b) => b.key === flags.backend && b.framework !== "react");
+  if (!backendBase) {
+    log.error(`❌ Unknown or non-backend base "${flags.backend}".`);
+    process.exit(1);
+  }
+  const frontendBase = index.bases.find((b) => b.key === flags.frontend && b.framework === "react");
+  if (!frontendBase) {
+    log.error(`❌ Unknown or non-frontend base "${flags.frontend}".`);
+    process.exit(1);
+  }
+
+  const backendSelected = resolveModulesFromFlags(index, backendBase, flags, "backend:");
+  const frontendSelected = resolveModulesFromFlags(index, frontendBase, flags, "frontend:");
+
+  if (!flags.name || flags.name === true) {
+    log.error("❌ --name=<projectName> is required.");
+    process.exit(1);
+  }
+  if (!PROJECT_NAME_PATTERN.test(flags.name)) {
+    log.error(
+      "❌ --name must use lowercase letters, numbers, hyphens, dots, or underscores, starting with a letter or number."
+    );
+    process.exit(1);
+  }
+
+  const rootDir =
+    flags.out && flags.out !== true ? cleanPath(flags.out) : path.join(process.cwd(), flags.name);
+  const backendDir = path.join(rootDir, "backend");
+  const frontendDir = path.join(rootDir, "frontend");
+
+  if (!flags.yes) {
+    const canProceed = await confirmOverwriteIfNeeded(rootDir);
+    if (!canProceed) {
+      log.info("Cancelled.");
+      return;
+    }
+  }
+
+  for (const dir of [backendDir, frontendDir]) {
+    const dirValidation = validateDirectory(dir);
+    if (!dirValidation.valid) {
+      log.error(dirValidation.error);
+      process.exit(1);
+    }
+  }
+
+  const backendSpinner = ora("Composing backend...").start();
+  try {
+    await composeBackend({
+      baseKey: backendBase.key,
+      moduleKeys: Object.keys(backendSelected),
+      language: backendBase.language,
+      outDir: backendDir,
+      vars: { projectName: flags.name },
+    });
+    backendSpinner.succeed(`Backend created at: ${backendDir}`);
+  } catch (error) {
+    backendSpinner.fail(`Error composing backend: ${error.message}`);
+    process.exit(1);
+  }
+
+  const frontendSpinner = ora("Composing frontend...").start();
+  try {
+    await composeBackend({
+      baseKey: frontendBase.key,
+      moduleKeys: Object.keys(frontendSelected),
+      language: frontendBase.language,
+      outDir: frontendDir,
+      vars: { projectName: flags.name },
+    });
+    frontendSpinner.succeed(`Frontend created at: ${frontendDir}`);
+  } catch (error) {
+    frontendSpinner.fail(`Error composing frontend: ${error.message}`);
+    process.exit(1);
+  }
+
+  writeFullStackReadme(rootDir, {
+    projectName: flags.name,
+    backendHasAuth: Object.keys(backendSelected).some((key) => key.startsWith("auth-")),
+    frontendHasAuth: Boolean(frontendSelected["auth-react"]),
+  });
+
+  if (flags.install) {
+    await installDependencies(backendDir);
+    await installDependencies(frontendDir);
+  }
+  printFullStackNextSteps(backendDir, frontendDir, !flags.install);
+}
+
+/**
  * Non-interactive composer entry point: `create-structure compose --base=...`.
  * Mirrors handleComposeBackend()'s logic (same registry, same dimension
  * list, same composeBackend() call) but takes every answer from flags
- * instead of prompting, so it can run unattended in CI.
+ * instead of prompting, so it can run unattended in CI. `--fullstack`
+ * switches to the two-sided flow (--backend/--frontend instead of --base).
  */
 async function handleComposeNonInteractive(argv) {
   const flags = parseCliFlags(argv);
@@ -840,6 +997,11 @@ async function handleComposeNonInteractive(argv) {
     return;
   }
 
+  if (flags.fullstack) {
+    await runFullStackNonInteractive(index, flags);
+    return;
+  }
+
   if (!flags.base || flags.base === true) {
     log.error("❌ --base=<key> is required. Run `create-structure compose --list` to see available bases.");
     process.exit(1);
@@ -852,41 +1014,8 @@ async function handleComposeNonInteractive(argv) {
     process.exit(1);
   }
 
-  const { key: baseKey, language, framework } = base;
-
-  const modulesByDimension = {};
-  for (const mod of index.modules) {
-    if (!mod.languages.includes(language)) continue;
-    if (mod.framework !== "any" && mod.framework !== framework) continue;
-    (modulesByDimension[mod.dimension] ||= []).push(mod);
-  }
-
-  const selected = {};
-  for (const [dimension] of COMPOSER_DIMENSIONS) {
-    const flagValue = flags[dimension];
-    if (!flagValue || flagValue === true) continue;
-
-    const candidates = modulesByDimension[dimension] || [];
-    const mod = candidates.find((m) => m.key === flagValue);
-    if (!mod) {
-      const validKeys = candidates.map((m) => m.key).join(", ") || "(none available for this base)";
-      log.error(
-        `❌ Unknown or unavailable module "${flagValue}" for --${dimension}. Valid options: ${validKeys}`
-      );
-      process.exit(1);
-    }
-
-    const missingDeps = (mod.dependsOn || []).filter((dep) => !selected[dep]);
-    if (missingDeps.length > 0) {
-      log.error(
-        `❌ --${dimension}=${flagValue} requires ${missingDeps.join(", ")} to also be selected.`
-      );
-      process.exit(1);
-    }
-
-    selected[mod.key] = mod;
-  }
-
+  const { key: baseKey, language } = base;
+  const selected = resolveModulesFromFlags(index, base, flags);
   const moduleKeys = Object.keys(selected);
 
   if (!flags.name || flags.name === true) {
@@ -935,6 +1064,52 @@ async function handleComposeNonInteractive(argv) {
 }
 
 /**
+ * Runs the "pick a module for this dimension, or None" prompt loop for one
+ * base, respecting each module's language/framework filter and dependsOn
+ * requirements. Shared by the single-target composer and the full-stack
+ * flow (which calls this once per side). `defaultOverrides` lets a caller
+ * default a dimension to something other than COMPOSER_DIMENSIONS' own
+ * default for this one run — used by the full-stack flow to default the
+ * frontend's auth prompt to match when the backend already picked one.
+ */
+async function promptModuleSelection(index, base, defaultOverrides = {}) {
+  const { language, framework } = base;
+
+  const modulesByDimension = {};
+  for (const mod of index.modules) {
+    if (!mod.languages.includes(language)) continue;
+    if (mod.framework !== "any" && mod.framework !== framework) continue;
+    (modulesByDimension[mod.dimension] ||= []).push(mod);
+  }
+
+  const selected = {};
+  for (const [dimension, message, defaultName] of COMPOSER_DIMENSIONS) {
+    const candidates = modulesByDimension[dimension] || [];
+    if (candidates.length === 0) continue;
+
+    const available = candidates.filter((mod) =>
+      (mod.dependsOn || []).every((dep) => selected[dep])
+    );
+    if (available.length === 0) continue;
+
+    const choices = [...available.map((mod) => mod.name), "None"];
+    const prompt = { type: "list", name: "choice", message, choices };
+    const effectiveDefault = defaultOverrides[dimension] || defaultName;
+    if (effectiveDefault && choices.includes(effectiveDefault)) {
+      prompt.default = effectiveDefault;
+    }
+
+    const { choice } = await inquirer.prompt([prompt]);
+    if (choice === "None") continue;
+
+    const mod = available.find((m) => m.name === choice);
+    selected[mod.key] = mod;
+  }
+
+  return selected;
+}
+
+/**
  * Flow for the composable generator: instead of picking one of a fixed set
  * of complete templates, each answer here selects an independent module (or
  * none) that the composer assembles into the final project. Handles both
@@ -970,38 +1145,8 @@ async function handleComposeBackend() {
 
   const baseKey = base.key;
   const language = base.language;
-  const framework = base.framework;
 
-  const modulesByDimension = {};
-  for (const mod of index.modules) {
-    if (!mod.languages.includes(language)) continue;
-    if (mod.framework !== "any" && mod.framework !== framework) continue;
-    (modulesByDimension[mod.dimension] ||= []).push(mod);
-  }
-
-  const selected = {};
-  for (const [dimension, message, defaultName] of COMPOSER_DIMENSIONS) {
-    const candidates = modulesByDimension[dimension] || [];
-    if (candidates.length === 0) continue;
-
-    const available = candidates.filter((mod) =>
-      (mod.dependsOn || []).every((dep) => selected[dep])
-    );
-    if (available.length === 0) continue;
-
-    const choices = [...available.map((mod) => mod.name), "None"];
-    const prompt = { type: "list", name: "choice", message, choices };
-    if (defaultName && choices.includes(defaultName)) {
-      prompt.default = defaultName;
-    }
-
-    const { choice } = await inquirer.prompt([prompt]);
-    if (choice === "None") continue;
-
-    const mod = available.find((m) => m.name === choice);
-    selected[mod.key] = mod;
-  }
-
+  const selected = await promptModuleSelection(index, base);
   const moduleKeys = Object.keys(selected);
 
   const projectName = await promptProjectName();
@@ -1046,6 +1191,194 @@ async function handleComposeBackend() {
       "npm run dev"
     );
   }
+}
+
+/**
+ * Writes a root-level README for the full-stack flow, tying the two
+ * independently-composed halves together and calling out that their auth
+ * modules (when both picked) already match each other's default env values
+ * out of the box — no manual wiring needed for the common case.
+ */
+function writeFullStackReadme(rootDir, { projectName, backendHasAuth, frontendHasAuth }) {
+  const authNote =
+    backendHasAuth && frontendHasAuth
+      ? "\nBoth sides include auth — `frontend/`'s auth module talks to the exact JWT contract `backend/`'s auth module exposes, and their default `.env.example` values (backend port 4000 + CORS origin, frontend's API URL) already match each other out of the box.\n"
+      : "\n";
+
+  const content = `# ${projectName}
+
+A full-stack app composed with [create-structure-cli](https://www.npmjs.com/package/create-structure-cli) — an independently-composed backend and frontend, in one repo.
+
+## Structure
+
+\`\`\`
+backend/    — see backend/README.md for what was composed in
+frontend/   — see frontend/README.md for what was composed in
+\`\`\`
+${authNote}
+## Running both
+
+\`\`\`bash
+# Terminal 1
+cd backend
+npm install
+npm run dev
+
+# Terminal 2
+cd frontend
+npm install
+npm run dev
+\`\`\`
+
+Each side has its own \`.env.example\` — copy it to \`.env\` before running if you change any of the defaults (backend port, CORS origin, frontend API URL).
+`;
+
+  fs.writeFileSync(path.join(rootDir, "README.md"), content, "utf-8");
+}
+
+/**
+ * Prints the combined "next steps" for the full-stack flow — two dev
+ * servers in two terminals, rather than the single-project message
+ * printNextSteps() gives everywhere else.
+ */
+function printFullStackNextSteps(backendDir, frontendDir, needsInstall) {
+  const installStep = needsInstall ? "npm install && " : "";
+  log.custom(
+    `🚀 Next steps:\n` +
+      `   Terminal 1: cd ${backendDir} && ${installStep}npm run dev\n` +
+      `   Terminal 2: cd ${frontendDir} && ${installStep}npm run dev`,
+    "rgb(194, 156, 247).bold"
+  );
+}
+
+/**
+ * Full-stack flow: composes a backend AND a frontend in one invocation,
+ * nested under backend/ and frontend/ inside a single project folder,
+ * instead of two unrelated runs of the single-target composer. Defaults the
+ * frontend's auth dimension to match if the backend picked one, since the
+ * two auth modules are built to talk to each other.
+ */
+async function handleComposeFullStack() {
+  const indexSpinner = ora("Fetching composer registry...").start();
+  let index;
+  try {
+    index = await fetchComposerIndex();
+    indexSpinner.stop();
+  } catch (error) {
+    indexSpinner.fail(error.message);
+    process.exit(1);
+  }
+
+  const backendBases = index.bases.filter((b) => b.framework !== "react");
+  const frontendBases = index.bases.filter((b) => b.framework === "react");
+  if (backendBases.length === 0 || frontendBases.length === 0) {
+    log.error("❌ The registry doesn't currently have both a backend and a frontend base available.");
+    process.exit(1);
+  }
+
+  log.custom("\n— Backend —", "bold");
+  const { backendBaseName } = await inquirer.prompt([
+    {
+      type: "list",
+      name: "backendBaseName",
+      message: "Choose a backend base:",
+      choices: backendBases.map((b) => b.name),
+    },
+  ]);
+  const backendBase = backendBases.find((b) => b.name === backendBaseName);
+  const backendSelected = await promptModuleSelection(index, backendBase);
+  const backendHasAuth = Object.keys(backendSelected).some((key) => key.startsWith("auth-"));
+
+  log.custom("\n— Frontend —", "bold");
+  const { frontendBaseName } = await inquirer.prompt([
+    {
+      type: "list",
+      name: "frontendBaseName",
+      message: "Choose a frontend base:",
+      choices: frontendBases.map((b) => b.name),
+    },
+  ]);
+  const frontendBase = frontendBases.find((b) => b.name === frontendBaseName);
+  const frontendDefaults = backendHasAuth ? { auth: "Auth (JWT)" } : {};
+  const frontendSelected = await promptModuleSelection(index, frontendBase, frontendDefaults);
+
+  const projectName = await promptProjectName();
+  const { outputBase } = await inquirer.prompt([
+    {
+      type: "input",
+      name: "outputBase",
+      message: "Enter output directory (leave empty to create a new folder with the project name):",
+    },
+  ]);
+  const rootDir = outputBase.trim() ? cleanPath(outputBase) : path.join(process.cwd(), projectName);
+  const backendDir = path.join(rootDir, "backend");
+  const frontendDir = path.join(rootDir, "frontend");
+
+  const canProceed = await confirmOverwriteIfNeeded(rootDir);
+  if (!canProceed) {
+    log.warn("⚠️ Aborted — target directory not empty.");
+    return;
+  }
+
+  for (const dir of [backendDir, frontendDir]) {
+    const dirValidation = validateDirectory(dir);
+    if (!dirValidation.valid) {
+      log.error(dirValidation.error);
+      process.exit(1);
+    }
+  }
+
+  const backendSpinner = ora("Composing backend...").start();
+  try {
+    await composeBackend({
+      baseKey: backendBase.key,
+      moduleKeys: Object.keys(backendSelected),
+      language: backendBase.language,
+      outDir: backendDir,
+      vars: { projectName },
+    });
+    backendSpinner.succeed(`Backend created at: ${backendDir}`);
+  } catch (error) {
+    backendSpinner.fail(`Error composing backend: ${error.message}`);
+    process.exit(1);
+  }
+
+  const frontendSpinner = ora("Composing frontend...").start();
+  try {
+    await composeBackend({
+      baseKey: frontendBase.key,
+      moduleKeys: Object.keys(frontendSelected),
+      language: frontendBase.language,
+      outDir: frontendDir,
+      vars: { projectName },
+    });
+    frontendSpinner.succeed(`Frontend created at: ${frontendDir}`);
+  } catch (error) {
+    frontendSpinner.fail(`Error composing frontend: ${error.message}`);
+    process.exit(1);
+  }
+
+  writeFullStackReadme(rootDir, {
+    projectName,
+    backendHasAuth,
+    frontendHasAuth: Boolean(frontendSelected["auth-react"]),
+  });
+  log.success(`✅ Full-stack project created at: ${rootDir}`);
+
+  const { confirmInstall } = await inquirer.prompt([
+    {
+      type: "confirm",
+      name: "confirmInstall",
+      message: "Auto install dependencies for both backend and frontend?",
+      default: true,
+    },
+  ]);
+
+  if (confirmInstall) {
+    await installDependencies(backendDir);
+    await installDependencies(frontendDir);
+  }
+  printFullStackNextSteps(backendDir, frontendDir, !confirmInstall);
 }
 
 /**

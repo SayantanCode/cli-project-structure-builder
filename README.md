@@ -15,6 +15,7 @@ Quickly scaffold project directories, organize file structures, and set up devel
 ## ✨ Features
 
 - 🧩 **Composable Backend & Frontend Generator**: Pick a base (Express in 3 flavors, Fastify, NestJS, or React+Vite) and independently mix in auth, RBAC, a database, validation, testing, Docker, CI, routing, styling, and state — each an independent module, assembled at scaffold time. The frontend's auth module is wired to the exact same JWT contract the backend auth modules expose, out of the box.
+- 🧩🧩 **Full-stack in one command**: Compose a backend and a frontend together into one repo (`backend/` + `frontend/`) instead of two separate runs — non-interactive/CI mode included.
 - 🎨 **Real UI library choice, not just an empty shell**: The React+Vite composer lets you pick Tailwind CSS, MUI, or Ant Design (or none) — a shared `Button`/`Input`/`Modal`/`Spinner` contract means the rest of your app (auth forms, router pages, the state demo) doesn't care which one is actually behind it. Ships with light/dark/system theming, a gradient landing page, and a live component showcase on first run.
 - 📁 **Multiple Input Formats**: Support for tree-style text files, JSON structure definitions, and public GitHub repo URLs
 - ⚡️ **Built-in Boilerplates**: Scaffold React+Vite, Next.js (App/Pages Router), or Express+Mongoose projects, in JavaScript or TypeScript, from an interactive picker
@@ -63,6 +64,7 @@ Running `create-structure` with no arguments opens an interactive menu:
 - **🔩 Official Template** — delegates to the framework's own official generator (`create-vite`, `create-next-app`, `create-react-app`, Angular CLI, Fastify CLI, Nest CLI)
 - **⚡️ Our Built-in Template** — scaffolds a ready-made boilerplate (React+Vite, Next.js App/Pages Router, Express+Mongoose), in JavaScript or TypeScript, with an optional automatic `npm install`
 - **🧩 Compose a Project (Backend or Frontend)** — pick a base and independently mix in modules along several dimensions; see [Compose a Project](#compose-a-project-backend-or-frontend) below
+- **🧩🧩 Compose a Full-Stack App (Backend + Frontend)** — composes both in one run, into `backend/` and `frontend/` inside a single project folder; see [Full-stack in one command](#full-stack-in-one-command) below
 - **📂 Custom Structure** — the tree-text / JSON structure flow described below, sourced from either a local file or a public GitHub repo URL
 
 ## 🚀 Usage
@@ -110,7 +112,20 @@ Instead of picking one fixed boilerplate, the composer lets you build one from i
 
 Every React + Vite project also always includes, regardless of what you pick: a light/dark/system `ThemeProvider` (persisted, extensible to more themes), a gradient landing page with a live showcase of the shared components, an `ErrorBoundary`, a favicon, and ESLint + Prettier already configured to match what `npm create vite` ships.
 
-**Current limitation:** the backend and frontend composers are two separate runs of the CLI into two separate output folders — there's no single "compose a full-stack app into one repo" command yet, even though the auth modules on each side are built to match. Run the composer twice (once per side) and point the frontend's `VITE_API_URL` at the backend's `CORS_ORIGIN`.
+### Full-stack in one command
+
+**🧩🧩 Compose a Full-Stack App** runs both composers in one invocation, into `backend/` and `frontend/` inside a single project folder, instead of two disconnected runs. If the backend picks an auth module, the frontend's auth prompt defaults to match it. Every base's default env values already line up out of the box (backend `PORT=4000` + `CORS_ORIGIN=http://localhost:5173`, frontend `VITE_API_URL=http://localhost:4000/api/v1` — matching Vite's own default dev port) — the value this flow actually adds is not re-typing the same choices twice and getting one repo instead of two.
+
+Non-interactively:
+
+```bash
+create-structure compose --fullstack \
+  --backend=express-ts --backend:database=db-mongoose --backend:auth=auth-jwt \
+  --frontend=react-vite-tsx --frontend:auth=auth-react --frontend:styling=styling-tailwind \
+  --name=my-app --out=./my-app --yes --install
+```
+
+Dimension flags are namespaced with `backend:`/`frontend:` (instead of the bare `--<dimension>` the single-target command uses) since some dimensions — auth, testing — exist on both sides and need independent answers.
 
 ### Non-interactive / scripted use
 
@@ -252,11 +267,12 @@ This only works for public repos (no auth token support yet), uses a single GitH
 
 ### Roadmap
 
-- A single "compose a full-stack app" flow that runs the backend and frontend composers together into one repo, instead of two separate runs
-- Non-interactive/flag mode for the composer (`--base=express-ts --auth=jwt --db=mongoose ...`) for scripted/CI use
+- A `copier`-style update/re-sync command so a previously-scaffolded project can pull in template fixes made after it was created
+- A monorepo output option (pnpm/Turborepo-style workspace) for the full-stack flow, instead of two independent `backend`/`frontend` folders
 - Next.js support in the frontend composer (React + Vite only for now)
 - Support for YAML and other structure formats
 - A GitHub personal-access-token option for the Custom Structure GitHub flow, to raise the unauthenticated rate limit and support private repos
+- Non-JS backend options (e.g. a Python/FastAPI or Go base)
 
 ## Contributing or Pull Requests
 
