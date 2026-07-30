@@ -9,3 +9,7 @@
 /CHANGELOG.md
 /test
 /*.test.js
+
+# Local tooling / internal working docs — never meant to ship
+/.claude
+/ROADMAP.md
