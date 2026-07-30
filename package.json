@@ -1,7 +1,7 @@
 {
   "name": "create-structure-cli",
-  "version": "1.1.0",
-  "description": "Create a project structure from text or JSON input",
+  "version": "2.0.0",
+  "description": "Scaffold a project from a text/JSON structure, a GitHub repo, or a composable backend + frontend generator (Express/Fastify/NestJS + React, with auth, RBAC, database, and more)",
   "bin": {
     "create-structure": "./cli.js"
   },
@@ -32,7 +32,16 @@
     "boilerplate cli",
     "project-structure",
     "folders",
-    "automation"
+    "automation",
+    "composer",
+    "scaffolding",
+    "full-stack",
+    "react boilerplate",
+    "nestjs boilerplate",
+    "fastify boilerplate",
+    "rbac",
+    "generator",
+    "code generator"
   ],
   "author": "Sayantan Chakraborty",
   "license": "MIT",
