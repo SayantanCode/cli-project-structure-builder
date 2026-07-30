@@ -258,7 +258,7 @@ async function main() {
         choices: [
           "🔩 Official Template (npx create-*)",
           "⚡️ Built-in Boilerplate",
-          "🧩 Compose a Backend",
+          "🧩 Compose a Project (Backend or Frontend)",
           "📂 Custom Structure",
         ],
       },
@@ -268,7 +268,7 @@ async function main() {
       await handleCustom();
     } else if (mode === "⚡️ Built-in Boilerplate") {
       await handleTemplate();
-    } else if (mode === "🧩 Compose a Backend") {
+    } else if (mode === "🧩 Compose a Project (Backend or Frontend)") {
       await handleComposeBackend();
     } else if (mode === "🔩 Official Template (npx create-*)") {
       await handleOfficial();
@@ -726,11 +726,12 @@ const COMPOSER_DIMENSIONS = [
 ];
 
 /**
- * Flow for the composable backend generator: instead of picking one of a
- * fixed set of complete templates, each answer here selects an independent
- * module (or none) that the composer assembles into the final project.
- * Entirely data-driven from the fetched composer index — a new module shows
- * up here automatically, no cli.js changes needed.
+ * Flow for the composable generator: instead of picking one of a fixed set
+ * of complete templates, each answer here selects an independent module (or
+ * none) that the composer assembles into the final project. Handles both
+ * backend bases (Express/Fastify/NestJS) and the React+Vite frontend base —
+ * entirely data-driven from the fetched composer index, so a new base or
+ * module shows up here automatically, no cli.js changes needed.
  */
 async function handleComposeBackend() {
   const indexSpinner = ora("Fetching composer registry...").start();
