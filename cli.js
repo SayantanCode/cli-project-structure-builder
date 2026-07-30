@@ -301,24 +301,49 @@ async function main() {
         name: "mode",
         message: "What do you want to do?",
         choices: [
-          "🔩 Official Template (npx create-*)",
-          "⚡️ Built-in Boilerplate",
-          "🧩 Compose a Project (Backend or Frontend)",
-          "🧩🧩 Compose a Full-Stack App (Backend + Frontend)",
-          "📂 Custom Structure",
+          {
+            name: "🔩 Official Template",
+            value: "official",
+            description:
+              "Delegates to the framework's own generator (create-vite, create-next-app, ng new, ...) — exactly what you'd get running it yourself.",
+          },
+          {
+            name: "⚡ Quick Boilerplate",
+            value: "boilerplate",
+            description:
+              "One ready-made project (React+Vite, Next.js, or Express+Mongoose) with sensible defaults already picked. No extra questions — just pick a framework and go.",
+          },
+          {
+            name: "🔧 Compose a Project",
+            value: "compose",
+            description:
+              "Build ONE project — just a backend, or just a frontend — by picking each piece yourself: auth, database, styling, testing, and more.",
+          },
+          {
+            name: "🔗 Compose a Full-Stack App",
+            value: "fullstack",
+            description:
+              "Build a backend AND a frontend together, in one folder, already set up to talk to each other (matching auth, ports, CORS).",
+          },
+          {
+            name: "📂 Custom Structure",
+            value: "custom",
+            description:
+              "Create an exact file/folder layout you already have in mind — from a text tree, a JSON file, or a GitHub repo URL.",
+          },
         ],
       },
     ]);
 
-    if (mode === "📂 Custom Structure") {
+    if (mode === "custom") {
       await handleCustom();
-    } else if (mode === "⚡️ Built-in Boilerplate") {
+    } else if (mode === "boilerplate") {
       await handleTemplate();
-    } else if (mode === "🧩 Compose a Project (Backend or Frontend)") {
+    } else if (mode === "compose") {
       await handleComposeBackend();
-    } else if (mode === "🧩🧩 Compose a Full-Stack App (Backend + Frontend)") {
+    } else if (mode === "fullstack") {
       await handleComposeFullStack();
-    } else if (mode === "🔩 Official Template (npx create-*)") {
+    } else if (mode === "official") {
       await handleOfficial();
     }
   } catch (error) {
