@@ -151,6 +151,37 @@ async function promptProjectName(message = "Enter project name:") {
 }
 
 /**
+ * Runs `npm install` in outDir with a spinner. Shared by the interactive
+ * install-confirmation flow and the non-interactive composer's `--install`
+ * flag, so there's one place that owns the actual spawn/exit-code handling.
+ */
+function installDependencies(outDir) {
+  return new Promise((resolve) => {
+    const spinner = ora("Installing dependencies...").start();
+    const startTime = Date.now();
+    const installProc = spawn("npm", ["install"], {
+      cwd: outDir,
+      shell: true,
+      stdio: "ignore",
+    });
+    installProc.on("error", (error) => {
+      spinner.fail(`Error installing dependencies: ${error.message}`);
+      process.exit(1);
+    });
+    installProc.on("close", (code) => {
+      const timeElapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      if (code !== 0) {
+        spinner.fail(`Error installing dependencies: npm install exited with code ${code}`);
+        process.exit(1);
+      } else {
+        spinner.succeed(`Dependencies installed in ${timeElapsed}s`);
+        resolve();
+      }
+    });
+  });
+}
+
+/**
  * Shared helper → asks + installs dependencies if package.json has deps.
  * devCommand (optional) is shown in the final "next steps" message.
  */
@@ -179,31 +210,8 @@ async function maybeInstallDependencies(outDir, packageJsonContent, devCommand) 
     };
 
     if (confirmDependenciesInstall) {
-      const spinner = ora("Installing dependencies...").start();
-      const startTime = Date.now();
-
-      await new Promise((resolve) => {
-        const installProc = spawn("npm", ["install"], {
-          cwd: outDir,
-          shell: true,
-          stdio: "ignore",
-        });
-        installProc.on("error", (error) => {
-          spinner.fail(`Error installing dependencies: ${error.message}`);
-          process.exit(1);
-        });
-        installProc.on("close", (code) => {
-          const timeElapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-          if (code !== 0) {
-            spinner.fail(`Error installing dependencies: npm install exited with code ${code}`);
-            process.exit(1);
-          } else {
-            spinner.succeed(`Dependencies installed in ${timeElapsed}s`);
-            printNextSteps();
-          }
-          resolve();
-        });
-      });
+      await installDependencies(outDir);
+      printNextSteps();
     } else {
       log.warn(
         `⚠️ Remember to install dependencies manually. Run 'cd ${outDir} && npm install'`
@@ -219,6 +227,13 @@ async function maybeInstallDependencies(outDir, packageJsonContent, devCommand) 
  * Main entry point with Inquirer flow.
  */
 async function main() {
+  // Non-interactive composer: `create-structure compose --base=... [--dimension=key]... --name=...`
+  // Keeps the composer usable from scripts/CI without going through prompts.
+  if (process.argv[2] === "compose") {
+    await handleComposeNonInteractive(process.argv.slice(3));
+    return;
+  }
+
   // Non-interactive fast path: `create-structure <file> [outputDir]`
   // Keeps scripted/CI usage working without going through the menu.
   if (process.argv.length > 2) {
@@ -724,6 +739,173 @@ const COMPOSER_DIMENSIONS = [
   ["docker", "Add Docker support?"],
   ["ci", "Add CI (GitHub Actions)?"],
 ];
+
+/**
+ * Parses `--key=value` and bare `--flag` arguments into an object. Bare
+ * flags (no `=`) become `true`. Anything not starting with `--` is ignored.
+ */
+function parseCliFlags(argv) {
+  const flags = {};
+  for (const arg of argv) {
+    if (!arg.startsWith("--")) continue;
+    const eq = arg.indexOf("=");
+    if (eq === -1) {
+      flags[arg.slice(2)] = true;
+    } else {
+      flags[arg.slice(2, eq)] = arg.slice(eq + 1);
+    }
+  }
+  return flags;
+}
+
+/**
+ * Prints every base and module key in the registry, grouped by dimension —
+ * the reference `create-structure compose --list` points to, since the
+ * non-interactive flags below take module *keys* (stable identifiers), not
+ * the display names shown in the interactive menu.
+ */
+function printComposerRegistry(index) {
+  log.custom("\nBases (--base=<key>):", "bold");
+  for (const base of index.bases) {
+    log.info(`  ${base.key.padEnd(20)} ${base.name} (${base.framework}, ${base.language})`);
+  }
+
+  const byDimension = {};
+  for (const mod of index.modules) {
+    (byDimension[mod.dimension] ||= []).push(mod);
+  }
+
+  for (const [dimension] of COMPOSER_DIMENSIONS) {
+    const mods = byDimension[dimension];
+    if (!mods) continue;
+    log.custom(`\n--${dimension}=<key>:`, "bold");
+    for (const mod of mods) {
+      log.info(`  ${mod.key.padEnd(24)} ${mod.name} (${mod.framework}, ${mod.languages.join("/")})`);
+    }
+  }
+}
+
+/**
+ * Non-interactive composer entry point: `create-structure compose --base=...`.
+ * Mirrors handleComposeBackend()'s logic (same registry, same dimension
+ * list, same composeBackend() call) but takes every answer from flags
+ * instead of prompting, so it can run unattended in CI.
+ */
+async function handleComposeNonInteractive(argv) {
+  const flags = parseCliFlags(argv);
+
+  const indexSpinner = ora("Fetching composer registry...").start();
+  let index;
+  try {
+    index = await fetchComposerIndex();
+    indexSpinner.stop();
+  } catch (error) {
+    indexSpinner.fail(error.message);
+    process.exit(1);
+  }
+
+  if (flags.list) {
+    printComposerRegistry(index);
+    return;
+  }
+
+  if (!flags.base || flags.base === true) {
+    log.error("❌ --base=<key> is required. Run `create-structure compose --list` to see available bases.");
+    process.exit(1);
+  }
+  const base = index.bases.find((b) => b.key === flags.base);
+  if (!base) {
+    log.error(
+      `❌ Unknown base "${flags.base}". Run \`create-structure compose --list\` to see available bases.`
+    );
+    process.exit(1);
+  }
+
+  const { key: baseKey, language, framework } = base;
+
+  const modulesByDimension = {};
+  for (const mod of index.modules) {
+    if (!mod.languages.includes(language)) continue;
+    if (mod.framework !== "any" && mod.framework !== framework) continue;
+    (modulesByDimension[mod.dimension] ||= []).push(mod);
+  }
+
+  const selected = {};
+  for (const [dimension] of COMPOSER_DIMENSIONS) {
+    const flagValue = flags[dimension];
+    if (!flagValue || flagValue === true) continue;
+
+    const candidates = modulesByDimension[dimension] || [];
+    const mod = candidates.find((m) => m.key === flagValue);
+    if (!mod) {
+      const validKeys = candidates.map((m) => m.key).join(", ") || "(none available for this base)";
+      log.error(
+        `❌ Unknown or unavailable module "${flagValue}" for --${dimension}. Valid options: ${validKeys}`
+      );
+      process.exit(1);
+    }
+
+    const missingDeps = (mod.dependsOn || []).filter((dep) => !selected[dep]);
+    if (missingDeps.length > 0) {
+      log.error(
+        `❌ --${dimension}=${flagValue} requires ${missingDeps.join(", ")} to also be selected.`
+      );
+      process.exit(1);
+    }
+
+    selected[mod.key] = mod;
+  }
+
+  const moduleKeys = Object.keys(selected);
+
+  if (!flags.name || flags.name === true) {
+    log.error("❌ --name=<projectName> is required.");
+    process.exit(1);
+  }
+  if (!PROJECT_NAME_PATTERN.test(flags.name)) {
+    log.error(
+      "❌ --name must use lowercase letters, numbers, hyphens, dots, or underscores, starting with a letter or number."
+    );
+    process.exit(1);
+  }
+
+  const outDir =
+    flags.out && flags.out !== true ? cleanPath(flags.out) : path.join(process.cwd(), flags.name);
+
+  if (!flags.yes) {
+    const canProceed = await confirmOverwriteIfNeeded(outDir);
+    if (!canProceed) {
+      log.info("Cancelled.");
+      return;
+    }
+  }
+
+  const dirValidation = validateDirectory(outDir);
+  if (!dirValidation.valid) {
+    log.error(dirValidation.error);
+    process.exit(1);
+  }
+
+  const composeSpinner = ora("Composing project...").start();
+  try {
+    await composeBackend({ baseKey, moduleKeys, language, outDir, vars: { projectName: flags.name } });
+    composeSpinner.succeed(`Project created at: ${outDir}`);
+  } catch (error) {
+    composeSpinner.fail(`Error composing project: ${error.message}`);
+    process.exit(1);
+  }
+
+  const devCommand = "npm run dev";
+  if (flags.install) {
+    await installDependencies(outDir);
+    log.custom(`🚀 Next steps:\n   cd ${outDir}\n   ${devCommand}`, "rgb(194, 156, 247).bold");
+  } else {
+    log.custom(
+      `🚀 Next steps:\n   cd ${outDir}\n   npm install\n   ${devCommand}`,
+      "rgb(194, 156, 247).bold"
+    );
+  }
+}
 
 /**
  * Flow for the composable generator: instead of picking one of a fixed set

@@ -112,6 +112,35 @@ Every React + Vite project also always includes, regardless of what you pick: a 
 
 **Current limitation:** the backend and frontend composers are two separate runs of the CLI into two separate output folders — there's no single "compose a full-stack app into one repo" command yet, even though the auth modules on each side are built to match. Run the composer twice (once per side) and point the frontend's `VITE_API_URL` at the backend's `CORS_ORIGIN`.
 
+### Non-interactive / scripted use
+
+For CI or scripting, `create-structure compose` takes every answer as a flag instead of prompting — module values are the stable **keys** from the registry, not the display names shown in the interactive menu:
+
+```bash
+# See every available base and module key
+create-structure compose --list
+
+# Compose a project without any prompts
+create-structure compose \
+  --base=express-ts \
+  --database=db-mongoose \
+  --auth=auth-jwt \
+  --rbac=rbac-simple \
+  --validation=validation-zod \
+  --testing=testing-jest \
+  --docker \
+  --ci \
+  --name=my-api \
+  --out=./my-api \
+  --yes \
+  --install
+```
+
+- `--base` and `--name` are required; any dimension you omit is left out (same as choosing "None" interactively)
+- `--out` defaults to `./<name>` if not given
+- `--yes` skips the "target directory isn't empty" confirmation
+- `--install` runs `npm install` automatically instead of just printing the command in "next steps"
+
 ## 📝 Structure File Formats
 1. Tree-Style Text Format
 Create a .txt file with your directory structure using tree notation:
