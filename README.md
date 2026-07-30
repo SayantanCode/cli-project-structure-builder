@@ -2,6 +2,7 @@
 
 
 [![npm version](https://badge.fury.io/js/create-structure-cli.svg)](https://badge.fury.io/js/create-structure-cli)
+[![CI](https://github.com/SayantanCode/cli-project-structure-builder/actions/workflows/ci.yml/badge.svg)](https://github.com/SayantanCode/cli-project-structure-builder/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Socket Badge](https://socket.dev/api/badge/npm/package/create-structure-cli/1.0.1)](https://socket.dev/npm/package/create-structure-cli/overview/1.0.1)
 ![NPM Downloads](https://img.shields.io/npm/dm/create-structure-cli)
