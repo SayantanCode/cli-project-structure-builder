@@ -151,6 +151,38 @@ async function promptProjectName(message = "Enter project name:") {
 }
 
 /**
+ * Prints a "cd <outDir>, then run this" hint after any successful scaffold.
+ * The single shared spot for this message so every flow (official
+ * passthrough, built-in boilerplate, composer, custom structure) looks the
+ * same instead of each hand-rolling its own.
+ */
+function printNextSteps(outDir, devCommand) {
+  const lines = [`cd ${outDir}`];
+  if (devCommand) lines.push(devCommand);
+  log.custom(`🚀 Next steps:\n   ${lines.join("\n   ")}`, "rgb(194, 156, 247).bold");
+}
+
+/**
+ * Looks for a real (non-template) package.json at the root of a freshly
+ * created structure and, if it has a "dev" or "start" script, returns the
+ * npm command for it — used so Custom Structure's "next steps" message can
+ * suggest something real instead of staying silent just because it doesn't
+ * know the project's framework the way the other flows do.
+ */
+function detectDevCommand(outDir) {
+  const pkgPath = path.join(outDir, "package.json");
+  if (!fs.existsSync(pkgPath)) return null;
+  try {
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+    if (pkg.scripts?.dev) return "npm run dev";
+    if (pkg.scripts?.start) return "npm start";
+  } catch {
+    // Not valid/parseable JSON — nothing to suggest.
+  }
+  return null;
+}
+
+/**
  * Runs `npm install` in outDir with a spinner. Shared by the interactive
  * install-confirmation flow and the non-interactive composer's `--install`
  * flag, so there's one place that owns the actual spawn/exit-code handling.
@@ -186,40 +218,38 @@ function installDependencies(outDir) {
  * devCommand (optional) is shown in the final "next steps" message.
  */
 async function maybeInstallDependencies(outDir, packageJsonContent, devCommand) {
+  let pkg;
   try {
-    const pkg = JSON.parse(packageJsonContent);
-    const hasDeps =
-      (pkg.dependencies && Object.keys(pkg.dependencies).length > 0) ||
-      (pkg.devDependencies && Object.keys(pkg.devDependencies).length > 0);
-
-    if (!hasDeps) return;
-
-    const { confirmDependenciesInstall } = await inquirer.prompt([
-      {
-        type: "confirm",
-        name: "confirmDependenciesInstall",
-        message: "Auto install dependencies?",
-        default: true,
-      },
-    ]);
-
-    const printNextSteps = () => {
-      const lines = [`cd ${outDir}`];
-      if (devCommand) lines.push(devCommand);
-      log.custom(`🚀 Next steps:\n   ${lines.join("\n   ")}`, "rgb(194, 156, 247).bold");
-    };
-
-    if (confirmDependenciesInstall) {
-      await installDependencies(outDir);
-      printNextSteps();
-    } else {
-      log.warn(
-        `⚠️ Remember to install dependencies manually. Run 'cd ${outDir} && npm install'`
-      );
-      printNextSteps();
-    }
+    pkg = JSON.parse(packageJsonContent);
   } catch {
-    // ignore if parsing fails
+    printNextSteps(outDir, devCommand);
+    return;
+  }
+
+  const hasDeps =
+    (pkg.dependencies && Object.keys(pkg.dependencies).length > 0) ||
+    (pkg.devDependencies && Object.keys(pkg.devDependencies).length > 0);
+
+  if (!hasDeps) {
+    printNextSteps(outDir, devCommand);
+    return;
+  }
+
+  const { confirmDependenciesInstall } = await inquirer.prompt([
+    {
+      type: "confirm",
+      name: "confirmDependenciesInstall",
+      message: "Auto install dependencies?",
+      default: true,
+    },
+  ]);
+
+  if (confirmDependenciesInstall) {
+    await installDependencies(outDir);
+    printNextSteps(outDir, devCommand);
+  } else {
+    log.warn(`⚠️ Remember to install dependencies manually. Run 'cd ${outDir} && npm install'`);
+    printNextSteps(outDir, devCommand);
   }
 }
 
@@ -387,11 +417,7 @@ async function handleOfficial() {
       );
     }
     log.success(`✅ ${framework} project created at ${projectName}`);
-    const devCommand = OFFICIAL_DEV_COMMANDS[framework];
-    log.custom(
-      `🚀 Next steps:\n   cd ${projectName}${devCommand ? `\n   ${devCommand}` : ""}`,
-      "rgb(194, 156, 247).bold"
-    );
+    printNextSteps(projectName, OFFICIAL_DEV_COMMANDS[framework]);
   } catch (err) {
     log.error(`❌ Failed to create ${framework} project: ${err.message}`);
     process.exit(1);
@@ -568,6 +594,9 @@ async function handleCustomFromGitHub() {
   if (result.failures > 0) {
     log.warn(`⚠️ ${result.failures} file(s) could not be fetched and were created empty instead.`);
   }
+
+  const devCommand = includeContents ? detectDevCommand(outDir) : null;
+  printNextSteps(outDir, devCommand ? `npm install\n   ${devCommand}` : null);
 }
 
 /**
@@ -594,7 +623,9 @@ async function runCustomStructure(filePath, outDir) {
   log.success(`✅ Structure created successfully at: ${outDir}`);
 
   if (packageJsonContent) {
-    await maybeInstallDependencies(outDir, packageJsonContent);
+    await maybeInstallDependencies(outDir, packageJsonContent, detectDevCommand(outDir));
+  } else {
+    printNextSteps(outDir, detectDevCommand(outDir));
   }
 }
 
@@ -895,15 +926,11 @@ async function handleComposeNonInteractive(argv) {
     process.exit(1);
   }
 
-  const devCommand = "npm run dev";
   if (flags.install) {
     await installDependencies(outDir);
-    log.custom(`🚀 Next steps:\n   cd ${outDir}\n   ${devCommand}`, "rgb(194, 156, 247).bold");
+    printNextSteps(outDir, "npm run dev");
   } else {
-    log.custom(
-      `🚀 Next steps:\n   cd ${outDir}\n   npm install\n   ${devCommand}`,
-      "rgb(194, 156, 247).bold"
-    );
+    printNextSteps(outDir, "npm install\n   npm run dev");
   }
 }
 
