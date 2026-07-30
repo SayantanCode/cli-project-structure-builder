@@ -295,56 +295,56 @@ async function main() {
     "rgb(85, 254, 254).italic"
   );
   try {
-    const { mode } = await inquirer.prompt([
-      {
-        type: "list",
-        name: "mode",
-        message: "What do you want to do?",
-        choices: [
-          {
-            name: "🔩 Official Template",
-            value: "official",
-            description:
-              "Delegates to the framework's own generator (create-vite, create-next-app, ng new, ...) — exactly what you'd get running it yourself.",
-          },
-          {
-            name: "⚡ Quick Boilerplate",
-            value: "boilerplate",
-            description:
-              "One ready-made project (React+Vite, Next.js, or Express+Mongoose) with sensible defaults already picked. No extra questions — just pick a framework and go.",
-          },
-          {
-            name: "🔧 Compose a Project",
-            value: "compose",
-            description:
-              "Build ONE project — just a backend, or just a frontend — by picking each piece yourself: auth, database, styling, testing, and more.",
-          },
-          {
-            name: "🔗 Compose a Full-Stack App",
-            value: "fullstack",
-            description:
-              "Build a backend AND a frontend together, in one folder, already set up to talk to each other (matching auth, ports, CORS).",
-          },
-          {
-            name: "📂 Custom Structure",
-            value: "custom",
-            description:
-              "Create an exact file/folder layout you already have in mind — from a text tree, a JSON file, or a GitHub repo URL.",
-          },
-        ],
-      },
-    ]);
+    // Loops back here whenever a flow's first sub-prompt returns "BACK"
+    // (its "⬅ Back to main menu" choice), instead of exiting after one pick.
+    for (;;) {
+      const { mode } = await inquirer.prompt([
+        {
+          type: "list",
+          name: "mode",
+          message: "What do you want to do?",
+          choices: [
+            {
+              name: "🔩 Official Template",
+              value: "official",
+              description:
+                "Delegates to the framework's own generator (create-vite, create-next-app, ng new, ...) — exactly what you'd get running it yourself.",
+            },
+            {
+              name: "⚡ Quick Boilerplate",
+              value: "boilerplate",
+              description:
+                "One ready-made project (React+Vite, Next.js, or Express+Mongoose) with sensible defaults already picked, no extra choices to make. Want to pick your own auth/database/styling instead? Use 'Compose a Project' below.",
+            },
+            {
+              name: "🔧 Compose a Project",
+              value: "compose",
+              description:
+                "Build a backend, a frontend, or both together — by picking each piece yourself: auth, database, styling, testing, and more. Just want a ready-made project fast with no choices? Use 'Quick Boilerplate' above instead.",
+            },
+            {
+              name: "📂 Custom Structure",
+              value: "custom",
+              description:
+                "Create an exact file/folder layout you already have in mind — from a text tree, a JSON file, or a GitHub repo URL.",
+            },
+          ],
+        },
+      ]);
 
-    if (mode === "custom") {
-      await handleCustom();
-    } else if (mode === "boilerplate") {
-      await handleTemplate();
-    } else if (mode === "compose") {
-      await handleComposeBackend();
-    } else if (mode === "fullstack") {
-      await handleComposeFullStack();
-    } else if (mode === "official") {
-      await handleOfficial();
+      let result;
+      if (mode === "custom") {
+        result = await handleCustom();
+      } else if (mode === "boilerplate") {
+        result = await handleTemplate();
+      } else if (mode === "compose") {
+        result = await handleComposeBackend();
+      } else if (mode === "official") {
+        result = await handleOfficial();
+      }
+
+      if (result === "BACK") continue;
+      break;
     }
   } catch (error) {
     log.error(`❌ Unexpected error: ${error.message}`);
@@ -389,6 +389,7 @@ async function handleOfficial() {
       name: "framework",
       message: "Choose an official framework/library:",
       choices: [
+        "⬅ Back to main menu",
         "React (CRA)",
         "Vite",
         "Next.js",
@@ -398,6 +399,7 @@ async function handleOfficial() {
       ],
     },
   ]);
+  if (framework === "⬅ Back to main menu") return "BACK";
 
   const projectName = await promptProjectName();
 
@@ -462,9 +464,10 @@ async function handleCustom() {
       type: "list",
       name: "source",
       message: "Where is your structure coming from?",
-      choices: ["📁 Local file", "🐙 GitHub repository"],
+      choices: ["⬅ Back to main menu", "📁 Local file", "🐙 GitHub repository"],
     },
   ]);
+  if (source === "⬅ Back to main menu") return "BACK";
 
   if (source === "🐙 GitHub repository") {
     await handleCustomFromGitHub();
@@ -690,9 +693,10 @@ async function handleTemplate() {
       type: "list",
       name: "category",
       message: "Choose a project category:",
-      choices: uniqueValues(candidates, "category"),
+      choices: ["⬅ Back to main menu", ...uniqueValues(candidates, "category")],
     },
   ]);
+  if (category === "⬅ Back to main menu") return "BACK";
   candidates = candidates.filter((t) => t.category === category);
 
   const { framework } = await inquirer.prompt([
@@ -1137,10 +1141,12 @@ async function promptModuleSelection(index, base, defaultOverrides = {}) {
 /**
  * Flow for the composable generator: instead of picking one of a fixed set
  * of complete templates, each answer here selects an independent module (or
- * none) that the composer assembles into the final project. Handles both
- * backend bases (Express/Fastify/NestJS) and the React+Vite frontend base —
- * entirely data-driven from the fetched composer index, so a new base or
- * module shows up here automatically, no cli.js changes needed.
+ * none) that the composer assembles into the final project. First asks
+ * whether you want a backend, a frontend, or both (full-stack) — filtering
+ * the base list to match — then hands off to the same per-dimension
+ * selection loop either way. Entirely data-driven from the fetched composer
+ * index, so a new base or module shows up here automatically, no cli.js
+ * changes needed.
  */
 async function handleComposeBackend() {
   const indexSpinner = ora("Fetching composer registry...").start();
@@ -1153,19 +1159,56 @@ async function handleComposeBackend() {
     process.exit(1);
   }
 
+  const { scope } = await inquirer.prompt([
+    {
+      type: "list",
+      name: "scope",
+      message: "What do you want to compose?",
+      choices: [
+        { name: "⬅ Back to main menu", value: "back" },
+        {
+          name: "Backend only",
+          value: "backend",
+          description: "An API server — Express, Fastify, or NestJS — with auth, database, etc. picked module by module.",
+        },
+        {
+          name: "Frontend only",
+          value: "frontend",
+          description: "A React + Vite app with routing, styling, state, etc. picked module by module.",
+        },
+        {
+          name: "Full-stack (both)",
+          value: "fullstack",
+          description: "A backend AND a frontend together in one folder, already set up to talk to each other (matching auth, ports, CORS).",
+        },
+      ],
+    },
+  ]);
+
+  if (scope === "back") return "BACK";
+  if (scope === "fullstack") return handleComposeFullStack(index);
+
+  const candidateBases = index.bases.filter((b) =>
+    scope === "backend" ? b.framework !== "react" : b.framework === "react"
+  );
+  if (candidateBases.length === 0) {
+    log.error(`❌ The registry doesn't currently have any ${scope} bases available.`);
+    process.exit(1);
+  }
+
   let base;
-  if (index.bases.length === 1) {
-    base = index.bases[0];
+  if (candidateBases.length === 1) {
+    base = candidateBases[0];
   } else {
     const { baseName } = await inquirer.prompt([
       {
         type: "list",
         name: "baseName",
         message: "Choose a base:",
-        choices: index.bases.map((b) => b.name),
+        choices: candidateBases.map((b) => b.name),
       },
     ]);
-    base = index.bases.find((b) => b.name === baseName);
+    base = candidateBases.find((b) => b.name === baseName);
   }
 
   const baseKey = base.key;
@@ -1281,17 +1324,20 @@ function printFullStackNextSteps(backendDir, frontendDir, needsInstall) {
  * nested under backend/ and frontend/ inside a single project folder,
  * instead of two unrelated runs of the single-target composer. Defaults the
  * frontend's auth dimension to match if the backend picked one, since the
- * two auth modules are built to talk to each other.
+ * two auth modules are built to talk to each other. Called from
+ * handleComposeBackend() once "Full-stack" is picked, reusing the registry
+ * it already fetched — `index` is only re-fetched here if called without one.
  */
-async function handleComposeFullStack() {
-  const indexSpinner = ora("Fetching composer registry...").start();
-  let index;
-  try {
-    index = await fetchComposerIndex();
-    indexSpinner.stop();
-  } catch (error) {
-    indexSpinner.fail(error.message);
-    process.exit(1);
+async function handleComposeFullStack(index) {
+  if (!index) {
+    const indexSpinner = ora("Fetching composer registry...").start();
+    try {
+      index = await fetchComposerIndex();
+      indexSpinner.stop();
+    } catch (error) {
+      indexSpinner.fail(error.message);
+      process.exit(1);
+    }
   }
 
   const backendBases = index.bases.filter((b) => b.framework !== "react");

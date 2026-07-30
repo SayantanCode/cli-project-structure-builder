@@ -62,10 +62,11 @@ create-structure ./structure.json ./my-new-project
 Running `create-structure` with no arguments opens an interactive menu:
 
 - **🔩 Official Template** — delegates to the framework's own official generator (`create-vite`, `create-next-app`, `create-react-app`, Angular CLI, Fastify CLI, Nest CLI)
-- **⚡️ Our Built-in Template** — scaffolds a ready-made boilerplate (React+Vite, Next.js App/Pages Router, Express+Mongoose), in JavaScript or TypeScript, with an optional automatic `npm install`
-- **🧩 Compose a Project (Backend or Frontend)** — pick a base and independently mix in modules along several dimensions; see [Compose a Project](#compose-a-project-backend-or-frontend) below
-- **🧩🧩 Compose a Full-Stack App (Backend + Frontend)** — composes both in one run, into `backend/` and `frontend/` inside a single project folder; see [Full-stack in one command](#full-stack-in-one-command) below
+- **⚡ Quick Boilerplate** — scaffolds a ready-made boilerplate (React+Vite, Next.js App/Pages Router, Express+Mongoose), in JavaScript or TypeScript, with an optional automatic `npm install` — sensible defaults, no extra choices
+- **🔧 Compose a Project** — first asks whether you want a backend, a frontend, or both (full-stack), then lets you independently mix in modules along several dimensions; see [Compose a Project](#compose-a-project-backend-or-frontend) below
 - **📂 Custom Structure** — the tree-text / JSON structure flow described below, sourced from either a local file or a public GitHub repo URL
+
+Every flow's first question has an "⬅ Back to main menu" choice, so picking the wrong top-level option doesn't mean restarting the whole CLI.
 
 ## 🚀 Usage
 ```bash
@@ -78,7 +79,7 @@ create-structure [structure_file] [output_directory]
 
 ## 🧩 Compose a Project (Backend or Frontend)
 
-Instead of picking one fixed boilerplate, the composer lets you build one from independent pieces. Pick a **base**, then answer a short series of "pick a module for this dimension, or None" prompts — only the dimensions that apply to your base are shown, and everything is assembled at scaffold time from a set of files that get merged together (a module can add its own files and wire itself into the base's shared entry point).
+Instead of picking one fixed boilerplate, the composer lets you build one from independent pieces. It first asks **Backend only / Frontend only / Full-stack (both)** — this picks which base list you choose from next, and full-stack hands off to the flow described in [Full-stack in one command](#full-stack-in-one-command) below. Either way, you then pick a **base** and answer a short series of "pick a module for this dimension, or None" prompts — only the dimensions that apply to your base are shown, and everything is assembled at scaffold time from a set of files that get merged together (a module can add its own files and wire itself into the base's shared entry point).
 
 **Bases:**
 
@@ -114,7 +115,7 @@ Every React + Vite project also always includes, regardless of what you pick: a 
 
 ### Full-stack in one command
 
-**🧩🧩 Compose a Full-Stack App** runs both composers in one invocation, into `backend/` and `frontend/` inside a single project folder, instead of two disconnected runs. If the backend picks an auth module, the frontend's auth prompt defaults to match it. Every base's default env values already line up out of the box (backend `PORT=4000` + `CORS_ORIGIN=http://localhost:5173`, frontend `VITE_API_URL=http://localhost:4000/api/v1` — matching Vite's own default dev port) — the value this flow actually adds is not re-typing the same choices twice and getting one repo instead of two.
+Picking **Full-stack (both)** at Compose a Project's first question runs both composers in one invocation, into `backend/` and `frontend/` inside a single project folder, instead of two disconnected runs. If the backend picks an auth module, the frontend's auth prompt defaults to match it. Every base's default env values already line up out of the box (backend `PORT=4000` + `CORS_ORIGIN=http://localhost:5173`, frontend `VITE_API_URL=http://localhost:4000/api/v1` — matching Vite's own default dev port) — the value this flow actually adds is not re-typing the same choices twice and getting one repo instead of two.
 
 Non-interactively:
 
