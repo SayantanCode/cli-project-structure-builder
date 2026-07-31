@@ -123,6 +123,7 @@ Instead of picking one fixed boilerplate, the composer lets you build one from i
 - **Validation** — Zod
 - **Auth** — JWT, `POST /auth/{register,login,refresh,logout}` + `GET /auth/me`, access token in memory, refresh token in an httpOnly cookie. Automatically backed by whichever database module you picked (Mongoose or Prisma) — same contract either way
 - **RBAC** — Simple (role-based) or Permission-based
+- **Real-time** — Socket.IO, a live "who's online" presence demo authenticated with the same JWT the HTTP API uses (Express or Fastify; requires the Auth module)
 - **Testing** — Jest
 - **Docker** — a ready-to-use `Dockerfile`
 - **CI** — a GitHub Actions workflow that runs your build/tests on every push/PR
@@ -133,6 +134,7 @@ Instead of picking one fixed boilerplate, the composer lets you build one from i
 - **Styling** — Tailwind CSS, MUI, or Ant Design (or none). Whichever you pick supplies its own `Button` / `Input` / `Modal` / `Spinner` / `ThemeToggle` — every other module (auth forms, the router pages, the state demo) imports these the same way regardless of which library is actually behind them, so switching later doesn't ripple through the rest of the app
 - **State** — Zustand, with a small working counter demo
 - **Auth** — a JWT auth flow (login/register/status) that talks to the *exact* contract the backend's Auth module exposes — pair the two and they work together out of the box
+- **Real-time** — a `useRealtime()` hook + live presence list that talks to the backend's Real-time module — pair the two the same way as Auth (requires the Auth module)
 - **Testing** — Vitest
 
 Every React + Vite project also always includes, regardless of what you pick: a light/dark/system `ThemeProvider` (persisted, extensible to more themes), a gradient landing page with a live showcase of the shared components, an `ErrorBoundary`, a favicon, and ESLint + Prettier already configured to match what `npm create vite` ships.
