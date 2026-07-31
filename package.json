@@ -46,7 +46,7 @@
   "author": "Sayantan Chakraborty",
   "license": "MIT",
   "dependencies": {
-    "chalk": "^5.6.0",
+    "chalk": "^6.0.0",
     "degit": "^3.6.3",
     "inquirer": "^12.9.3",
     "ora": "^9.4.1"
