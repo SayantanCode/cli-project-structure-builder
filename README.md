@@ -16,7 +16,7 @@ Quickly scaffold project directories, organize file structures, and set up devel
 ## ✨ Features
 
 - 🧩 **Composable Backend & Frontend Generator**: Pick a base (Express in 3 flavors, Fastify, NestJS, or React+Vite) and independently mix in auth, RBAC, a database, validation, testing, Docker, CI, routing, styling, and state — each an independent module, assembled at scaffold time. The frontend's auth module is wired to the exact same JWT contract the backend auth modules expose, out of the box.
-- 🧩🧩 **Full-stack in one command**: Compose a backend and a frontend together into one repo (`backend/` + `frontend/`) instead of two separate runs — non-interactive/CI mode included.
+- 🔗 **Full-stack in one command**: Compose a backend and a frontend together into one repo (`backend/` + `frontend/`) instead of two separate runs — non-interactive/CI mode included.
 - 🎨 **Real UI library choice, not just an empty shell**: The React+Vite composer lets you pick Tailwind CSS, MUI, or Ant Design (or none) — a shared `Button`/`Input`/`Modal`/`Spinner` contract means the rest of your app (auth forms, router pages, the state demo) doesn't care which one is actually behind it. Ships with light/dark/system theming, a gradient landing page, and a live component showcase on first run.
 - 📁 **Multiple Input Formats**: Support for tree-style text files, JSON structure definitions, and public GitHub repo URLs
 - ⚡️ **Built-in Boilerplates**: Scaffold React+Vite, Next.js (App/Pages Router), or Express+Mongoose projects, in JavaScript or TypeScript, from an interactive picker
@@ -26,6 +26,29 @@ Quickly scaffold project directories, organize file structures, and set up devel
 - 🌍 **Cross-Platform**: Works on Windows(tested), macOS(test needed), and Linux(test needed)
 - 🔄 **Flexible Paths**: Support for both absolute and relative paths
 - 📝 **Batch Operations**: Create complex nested structures in seconds
+
+## 🔒 Why trust this tool
+
+The whole point of a scaffolding tool is that you're about to run its output on your machine — so here's exactly what's in it, no hand-waving:
+
+- **4 direct dependencies, total**: [`chalk`](https://www.npmjs.com/package/chalk) (terminal colors), [`degit`](https://www.npmjs.com/package/degit) (fetching templates), [`inquirer`](https://www.npmjs.com/package/inquirer) (prompts), [`ora`](https://www.npmjs.com/package/ora) (spinners). No framework, no bundler, no telemetry SDK.
+- **No postinstall/install scripts** — nothing runs on your machine at install time beyond what npm itself does. `npm pack --dry-run` on this repo shows exactly 8 files in the published package; there's nothing to hide.
+- **No telemetry, period.** Nothing is collected or sent anywhere by this CLI. (If usage analytics are ever added later — to see which composer modules people actually pick, the way [Next.js](https://nextjs.org/telemetry) and [Nx](https://nx.dev/docs/reference/telemetry) do it — it will be opt-in, documented here first, and excludes file paths/contents/env vars by design. Not shipped today.)
+- **Deterministic, diff-reviewable output** — every composed project is assembled from plain files in a public repo ([`create-structure-templates`](https://github.com/SayantanCode/create-structure-templates)) that you can read before you run anything, unlike AI code generators where the output isn't something you can audit against a known source.
+- **CI on every push/PR** on both this repo and the templates repo — a representative matrix of base+module combinations is actually composed, installed, and built before anything merges.
+
+## 🆚 How this compares
+
+| Feature | This tool | `create-vite` / `create-next-app` | `create-t3-app` | Paid SaaS boilerplates (ShipFast, Makerkit, supastarter) | Yeoman / Cookiecutter |
+| --- | --- | --- | --- | --- | --- |
+| Backend **and** frontend, composed together | ✅ | ❌ (frontend only) | ⚠️ opinionated single stack | ✅ (opinionated single stack) | ⚠️ depends on the generator |
+| Choice of framework (Express/Fastify/NestJS, or Next.js) | ✅ | ❌ | ❌ (Next.js only) | ❌ (usually Next.js only) | ⚠️ depends on the generator |
+| Auth + RBAC wired backend↔frontend out of the box | ✅ | ❌ | ⚠️ auth yes, RBAC no | ✅ (usually hosted auth) | ❌ |
+| Cost | Free, MIT | Free | Free | $199–$299 one-time or subscription | Free |
+| Payments / multi-tenancy built in | ❌ (on the roadmap) | ❌ | ❌ | ✅ (their whole point) | ❌ |
+| Update previously-scaffolded projects | ❌ (on the roadmap, Copier-style) | ❌ | ❌ | ❌ | ✅ (Copier only) |
+
+Not a "this tool wins at everything" table — if you're shipping a SaaS product with billing on day one, a paid boilerplate is genuinely the faster path. This tool's niche is free, composable infrastructure scaffolding across more framework choices than any one of the above offers alone.
 
 ## 📦 Installation
 
