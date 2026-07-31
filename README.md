@@ -288,7 +288,9 @@ After fetching the tree, you choose what actually gets created:
 - **Structure only** — every file becomes an empty file (folders included), just the shape of the repo — handy for using someone else's project layout as a starting point without pulling in their actual code.
 - **Structure + real file contents** — fetches every file's real content too.
 
-This only works for public repos (no auth token support yet), uses a single GitHub API call to list the whole tree, and fetches file contents (when requested) from `raw.githubusercontent.com` to avoid GitHub's stricter API rate limit.
+Uses a single GitHub API call to list the whole tree, and fetches file contents (when requested) from `raw.githubusercontent.com` to avoid GitHub's stricter API rate limit.
+
+**Private repos, or hitting the rate limit?** Set a `GITHUB_TOKEN` or `GH_TOKEN` environment variable (same convention as the `gh` CLI) to a [personal access token](https://github.com/settings/tokens) with `repo` scope — this raises the unauthenticated 60-requests/hour limit to 5,000/hour and unlocks private repos you have access to. Entirely optional; the flow works the same without one for public repos.
 
 ### Roadmap
 

@@ -530,6 +530,14 @@ async function handleCustomFromGitHub() {
     process.exit(1);
   }
 
+  // GITHUB_TOKEN/GH_TOKEN (matching gh CLI's own convention) — raises the
+  // unauthenticated 60/hour rate limit to 5,000/hour and unlocks private
+  // repos. Entirely optional; the flow works the same without one.
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || undefined;
+  if (token) {
+    log.info("ℹ️ Using GITHUB_TOKEN for authenticated GitHub requests (5,000/hour limit).");
+  }
+
   const { includeContents } = await inquirer.prompt([
     {
       type: "list",
@@ -545,7 +553,7 @@ async function handleCustomFromGitHub() {
   const fetchSpinner = ora(`Fetching structure from ${parsed.owner}/${parsed.repo}...`).start();
   let tree;
   try {
-    tree = await fetchGitHubTree(parsed);
+    tree = await fetchGitHubTree({ ...parsed, token });
     fetchSpinner.stop();
   } catch (error) {
     fetchSpinner.fail(error.message);
@@ -614,6 +622,7 @@ async function handleCustomFromGitHub() {
       entries: tree.entries,
       outDir,
       includeContents,
+      token,
     });
     writeSpinner.stop();
   } catch (error) {
