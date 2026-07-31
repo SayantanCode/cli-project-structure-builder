@@ -121,12 +121,14 @@ Instead of picking one fixed boilerplate, the composer lets you build one from i
 
 - **Database** — MongoDB + Mongoose, or PostgreSQL + Prisma 7 (TypeScript bases only; ships a typed client, `prisma.config.ts`, and `db:push`/`db:migrate`/`db:studio` scripts)
 - **Validation** — Zod
-- **Auth** — JWT, `POST /auth/{register,login,refresh,logout}` + `GET /auth/me`, access token in memory, refresh token in an httpOnly cookie. Automatically backed by whichever database module you picked (Mongoose or Prisma) — same contract either way
+- **Auth** — JWT, `POST /auth/{register,login,refresh,logout}` + `GET /auth/me`, access token in memory, refresh token in an httpOnly cookie. Automatically backed by whichever database module you picked (Mongoose or Prisma) — same contract either way. `register`/`login` are rate-limited (20 requests/15 min per IP) against brute-force/mass-registration out of the box
 - **RBAC** — Simple (role-based) or Permission-based
 - **Real-time** — Socket.IO, a live "who's online" presence demo authenticated with the same JWT the HTTP API uses (Express or Fastify; requires the Auth module)
 - **Testing** — Jest
 - **Docker** — a ready-to-use `Dockerfile`
 - **CI** — a GitHub Actions workflow that runs your build/tests on every push/PR
+
+Every composed backend also always includes: `GET /health` (liveness) and `GET /healthz` (readiness — reports real database connectivity if a database module is selected, `503` if it's down), and a graceful `SIGTERM`/`SIGINT` shutdown handler that closes the HTTP server and database connection before exiting instead of dropping in-flight requests.
 
 **Frontend dimensions**, available for the React + Vite base:
 
