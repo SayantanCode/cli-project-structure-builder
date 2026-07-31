@@ -119,9 +119,9 @@ Instead of picking one fixed boilerplate, the composer lets you build one from i
 
 **Backend dimensions**, available across Express/Fastify/NestJS (a module only shows up for the frameworks/languages it actually supports):
 
-- **Database** — MongoDB + Mongoose
+- **Database** — MongoDB + Mongoose, or PostgreSQL + Prisma 7 (TypeScript bases only; ships a typed client, `prisma.config.ts`, and `db:push`/`db:migrate`/`db:studio` scripts)
 - **Validation** — Zod
-- **Auth** — JWT, `POST /auth/{register,login,refresh,logout}` + `GET /auth/me`, access token in memory, refresh token in an httpOnly cookie
+- **Auth** — JWT, `POST /auth/{register,login,refresh,logout}` + `GET /auth/me`, access token in memory, refresh token in an httpOnly cookie. Automatically backed by whichever database module you picked (Mongoose or Prisma) — same contract either way
 - **RBAC** — Simple (role-based) or Permission-based
 - **Testing** — Jest
 - **Docker** — a ready-to-use `Dockerfile`
@@ -177,6 +177,7 @@ create-structure compose \
 ```
 
 - `--base` and `--name` are required; any dimension you omit is left out (same as choosing "None" interactively)
+- Swap `--database=db-mongoose --auth=auth-jwt` for `--database=db-prisma-postgres --auth=auth-jwt-prisma` on a TypeScript base to get Postgres/Prisma instead — same auth contract, different backing store
 - `--out` defaults to `./<name>` if not given
 - `--yes` skips the "target directory isn't empty" confirmation
 - `--install` runs `npm install` automatically instead of just printing the command in "next steps"
