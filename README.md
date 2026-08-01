@@ -189,6 +189,38 @@ create-structure compose \
   --install
 ```
 
+Every flag's valid key(s), as of this writing (run `create-structure compose --list` for the always-current list — new modules land there before this table gets updated):
+
+**Backend** (`express-cjs`, `express-esm`, `express-ts`, `fastify-esm`, `nestjs`):
+
+| Flag | Valid key(s) | Notes |
+| --- | --- | --- |
+| `--database=` | `db-mongoose`, `db-prisma-postgres` | Prisma requires a TypeScript base |
+| `--validation=` | `validation-zod` | |
+| `--auth=` | `auth-jwt` (Express), `auth-jwt-fastify` (Fastify), `auth-jwt-nest` (NestJS), `auth-jwt-prisma` (Express+TS, pairs with `db-prisma-postgres`) | |
+| `--rbac=` | `rbac-simple`/`rbac-simple-fastify`/`rbac-simple-nest`, `rbac-permission`/`rbac-permission-fastify`/`rbac-permission-nest` | requires `--auth` |
+| `--realtime=` | `realtime-socketio` (Express), `realtime-socketio-fastify` (Fastify, requires `--auth=auth-jwt-fastify`) | |
+| `--cache=` | `cache-redis` | |
+| `--queue=` | `queue-bullmq` | worker runs as its own process — `npm run dev:worker` |
+| `--cron=` | `cron-node` | |
+| `--logging=` | `logging-pino` (default if omitted), `logging-winston` | Express only |
+| `--testing=` | `testing-jest` (Express), `testing-jest-fastify` (Fastify), `testing-jest-nest` (NestJS) | |
+| `--docker` | *(no value — presence alone is enough)* | |
+| `--ci` | *(no value — presence alone is enough)* | |
+
+**Frontend** (`react-vite-jsx`, `react-vite-tsx`):
+
+| Flag | Valid key(s) | Notes |
+| --- | --- | --- |
+| `--routing=` | `router-react` | |
+| `--styling=` | `styling-tailwind`, `styling-mui`, `styling-antd` | |
+| `--state=` | `state-zustand` | |
+| `--auth=` | `auth-react` | |
+| `--realtime=` | `realtime-react` | requires `--auth=auth-react` |
+| `--testing=` | `testing-vitest` | |
+
+A flag left as just `--<dimension>` (no `=<key>`) only resolves on its own when a dimension has exactly one valid key for that base (`--docker`/`--ci`/`--cache`/`--queue`/`--cron`) — anywhere with more than one option, it fails fast with the valid keys listed rather than silently guessing one for you.
+
 - `--base` and `--name` are required; any dimension you omit is left out (same as choosing "None" interactively)
 - Swap `--database=db-mongoose --auth=auth-jwt` for `--database=db-prisma-postgres --auth=auth-jwt-prisma` on a TypeScript base to get Postgres/Prisma instead — same auth contract, different backing store
 - `--out` defaults to `./<name>` if not given

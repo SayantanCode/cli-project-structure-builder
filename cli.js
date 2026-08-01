@@ -957,14 +957,34 @@ function resolveModulesFromFlags(index, base, flags, prefix = "") {
   for (const [dimension] of COMPOSER_DIMENSIONS) {
     const flagKey = `${prefix}${dimension}`;
     const flagValue = flags[flagKey];
-    if (!flagValue || flagValue === true) continue;
+    if (flagValue === undefined || flagValue === "") continue;
 
     const candidates = modulesByDimension[dimension] || [];
-    const mod = candidates.find((m) => m.key === flagValue);
+
+    // A bare flag with no "=<key>" (e.g. `--docker`, not `--docker=docker`)
+    // only resolves unambiguously when exactly one module exists for this
+    // dimension on this base — true for single-choice dimensions like
+    // docker/ci/cache/queue/cron. Anywhere else, silently picking "the
+    // first one" would be guessing on the user's behalf, so ask for an
+    // explicit key instead.
+    let resolvedKey = flagValue;
+    if (flagValue === true) {
+      if (candidates.length !== 1) {
+        const hint =
+          candidates.length === 0
+            ? "no modules available for this base"
+            : `multiple options: ${candidates.map((m) => m.key).join(", ")}`;
+        log.error(`❌ --${flagKey} needs a value here (${hint}). Use --${flagKey}=<key>.`);
+        process.exit(1);
+      }
+      resolvedKey = candidates[0].key;
+    }
+
+    const mod = candidates.find((m) => m.key === resolvedKey);
     if (!mod) {
       const validKeys = candidates.map((m) => m.key).join(", ") || "(none available for this base)";
       log.error(
-        `❌ Unknown or unavailable module "${flagValue}" for --${flagKey}. Valid options: ${validKeys}`
+        `❌ Unknown or unavailable module "${resolvedKey}" for --${flagKey}. Valid options: ${validKeys}`
       );
       process.exit(1);
     }
@@ -972,7 +992,7 @@ function resolveModulesFromFlags(index, base, flags, prefix = "") {
     const missingDeps = (mod.dependsOn || []).filter((dep) => !selected[dep]);
     if (missingDeps.length > 0) {
       log.error(
-        `❌ --${flagKey}=${flagValue} requires ${missingDeps.join(", ")} to also be selected.`
+        `❌ --${flagKey}=${resolvedKey} requires ${missingDeps.join(", ")} to also be selected.`
       );
       process.exit(1);
     }
