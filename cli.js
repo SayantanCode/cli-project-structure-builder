@@ -808,6 +808,7 @@ const COMPOSER_DIMENSIONS = [
   ["auth", "Choose an auth style:"],
   ["rbac", "Choose an access-control (RBAC) style:"],
   ["realtime", "Add a real-time (WebSocket) option?"],
+  ["logging", "Choose a logging library (Pino is used by default):", "None"],
   ["testing", "Choose a testing library:"],
   ["docker", "Add Docker support?"],
   ["ci", "Add CI (GitHub Actions)?"],
