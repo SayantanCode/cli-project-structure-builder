@@ -810,6 +810,7 @@ const COMPOSER_DIMENSIONS = [
   ["realtime", "Add a real-time (WebSocket) option?"],
   ["cache", "Add a caching layer (Redis)?"],
   ["queue", "Add a background job queue (BullMQ)?"],
+  ["cron", "Add scheduled/cron jobs (node-cron)?"],
   ["logging", "Choose a logging library (Pino is used by default):", "None"],
   ["testing", "Choose a testing library:"],
   ["docker", "Add Docker support?"],
