@@ -288,7 +288,8 @@ function printHelp() {
   log.info("  --yes                                        Skip the install-dependencies confirmation prompt");
   log.info("  --install                                    Install dependencies automatically\n");
 
-  log.info("Run `create-structure compose --list` to see every available base and module for the flags above.\n");
+  log.info("Run `create-structure compose --list` to see every available base and module for the flags above.");
+  log.info("Leave some out and run this in a real terminal — it prompts for whatever's missing instead of failing.\n");
 
   log.custom("Examples:", "bold");
   log.info(
@@ -935,15 +936,29 @@ function printComposerRegistry(index) {
   }
 }
 
+// True only in a real terminal — safe to fall back to prompting for
+// whatever a `compose` invocation didn't answer via flags. Piped/CI input
+// keeps the strict "missing flag -> error and exit" behavior instead, so
+// scripted usage never silently blocks on a prompt nobody can answer.
+const canPromptInteractively = () => Boolean(process.stdin.isTTY);
+
 /**
- * Flag-driven equivalent of promptModuleSelection(): resolves module
- * selections for one base from `--<prefix><dimension>=<key>` flags,
- * honoring dependsOn requirements the same way the interactive prompt does.
- * `prefix` namespaces the flag keys ("backend:"/"frontend:" for --fullstack,
- * "" for the single-target command) so the same dimension name (auth,
- * testing) can be answered independently on each side without colliding.
+ * Resolves module selections for one base from `--<prefix><dimension>=<key>`
+ * flags, honoring dependsOn requirements the same way the interactive prompt
+ * does. `prefix` namespaces the flag keys ("backend:"/"frontend:" for
+ * --fullstack, "" for the single-target command) so the same dimension name
+ * (auth, testing) can be answered independently on each side without
+ * colliding.
+ *
+ * Any dimension NOT answered via flag is prompted for instead — the same
+ * question, choices, and default `promptModuleSelection()` would use — as
+ * long as `canPrompt` is true; otherwise it's just left out, exactly like
+ * choosing "None" (this is what keeps a fully-flagged CI invocation
+ * behaving identically to before). This lets `compose --name=my-api` alone
+ * work: everything else gets asked for, one question at a time, instead of
+ * failing outright over an incomplete one-liner.
  */
-function resolveModulesFromFlags(index, base, flags, prefix = "") {
+async function resolveOrPromptModules(index, base, flags, canPrompt, prefix = "") {
   const { language, framework } = base;
 
   const modulesByDimension = {};
@@ -954,49 +969,66 @@ function resolveModulesFromFlags(index, base, flags, prefix = "") {
   }
 
   const selected = {};
-  for (const [dimension] of COMPOSER_DIMENSIONS) {
+  for (const [dimension, message, defaultName] of COMPOSER_DIMENSIONS) {
     const flagKey = `${prefix}${dimension}`;
-    const flagValue = flags[flagKey];
-    if (flagValue === undefined || flagValue === "") continue;
-
     const candidates = modulesByDimension[dimension] || [];
+    if (candidates.length === 0) continue;
 
-    // A bare flag with no "=<key>" (e.g. `--docker`, not `--docker=docker`)
-    // only resolves unambiguously when exactly one module exists for this
-    // dimension on this base — true for single-choice dimensions like
-    // docker/ci/cache/queue/cron. Anywhere else, silently picking "the
-    // first one" would be guessing on the user's behalf, so ask for an
-    // explicit key instead.
-    let resolvedKey = flagValue;
-    if (flagValue === true) {
-      if (candidates.length !== 1) {
-        const hint =
-          candidates.length === 0
-            ? "no modules available for this base"
-            : `multiple options: ${candidates.map((m) => m.key).join(", ")}`;
-        log.error(`❌ --${flagKey} needs a value here (${hint}). Use --${flagKey}=<key>.`);
+    const flagValue = flags[flagKey];
+    if (flagValue !== undefined && flagValue !== "") {
+      // A bare flag with no "=<key>" (e.g. `--docker`, not `--docker=docker`)
+      // only resolves unambiguously when exactly one module exists for this
+      // dimension on this base — true for single-choice dimensions like
+      // docker/ci/cache/queue/cron. Anywhere else, silently picking "the
+      // first one" would be guessing on the user's behalf, so ask for an
+      // explicit key instead.
+      let resolvedKey = flagValue;
+      if (flagValue === true) {
+        if (candidates.length !== 1) {
+          const hint =
+            candidates.length === 0
+              ? "no modules available for this base"
+              : `multiple options: ${candidates.map((m) => m.key).join(", ")}`;
+          log.error(`❌ --${flagKey} needs a value here (${hint}). Use --${flagKey}=<key>.`);
+          process.exit(1);
+        }
+        resolvedKey = candidates[0].key;
+      }
+
+      const mod = candidates.find((m) => m.key === resolvedKey);
+      if (!mod) {
+        const validKeys = candidates.map((m) => m.key).join(", ") || "(none available for this base)";
+        log.error(
+          `❌ Unknown or unavailable module "${resolvedKey}" for --${flagKey}. Valid options: ${validKeys}`
+        );
         process.exit(1);
       }
-      resolvedKey = candidates[0].key;
+
+      const missingDeps = (mod.dependsOn || []).filter((dep) => !selected[dep]);
+      if (missingDeps.length > 0) {
+        log.error(
+          `❌ --${flagKey}=${resolvedKey} requires ${missingDeps.join(", ")} to also be selected.`
+        );
+        process.exit(1);
+      }
+
+      selected[mod.key] = mod;
+      continue;
     }
 
-    const mod = candidates.find((m) => m.key === resolvedKey);
-    if (!mod) {
-      const validKeys = candidates.map((m) => m.key).join(", ") || "(none available for this base)";
-      log.error(
-        `❌ Unknown or unavailable module "${resolvedKey}" for --${flagKey}. Valid options: ${validKeys}`
-      );
-      process.exit(1);
-    }
+    if (!canPrompt) continue;
 
-    const missingDeps = (mod.dependsOn || []).filter((dep) => !selected[dep]);
-    if (missingDeps.length > 0) {
-      log.error(
-        `❌ --${flagKey}=${resolvedKey} requires ${missingDeps.join(", ")} to also be selected.`
-      );
-      process.exit(1);
-    }
+    const available = candidates.filter((mod) => (mod.dependsOn || []).every((dep) => selected[dep]));
+    if (available.length === 0) continue;
 
+    const choices = [...available.map((mod) => mod.name), "None"];
+    const prompt = { type: "list", name: "choice", message, choices };
+    if (defaultName && choices.includes(defaultName)) prompt.default = defaultName;
+
+    const { choice } = await inquirer.prompt([prompt]);
+    if (choice === "None") continue;
+
+    const mod = available.find((m) => m.name === choice);
     selected[mod.key] = mod;
   }
 
@@ -1004,48 +1036,85 @@ function resolveModulesFromFlags(index, base, flags, prefix = "") {
 }
 
 /**
+ * Picks a base for the given scope ("backend" or "frontend") — used when
+ * `compose`/`compose --fullstack` is missing `--base`/`--backend`/`--frontend`
+ * and we're allowed to prompt for it. Skips the prompt when there's only one
+ * candidate, same as the fully-interactive flow does.
+ */
+async function promptBaseForScope(index, scope) {
+  const candidateBases = index.bases.filter((b) =>
+    scope === "backend" ? b.framework !== "react" : b.framework === "react"
+  );
+  if (candidateBases.length === 0) {
+    log.error(`❌ The registry doesn't currently have any ${scope} bases available.`);
+    process.exit(1);
+  }
+  if (candidateBases.length === 1) return candidateBases[0];
+
+  const { baseName } = await inquirer.prompt([
+    { type: "list", name: "baseName", message: "Choose a base:", choices: candidateBases.map((b) => b.name) },
+  ]);
+  return candidateBases.find((b) => b.name === baseName);
+}
+
+/**
  * Non-interactive full-stack composer: `create-structure compose --fullstack
  * --backend=<key> --frontend=<key> --backend:<dim>=<key> --frontend:<dim>=<key>
  * --name=... `. Mirrors handleComposeFullStack()'s logic (one repo, backend/
- * + frontend/ subfolders, shared README) but takes every answer from flags.
+ * + frontend/ subfolders, shared README) but takes every answer from flags —
+ * falling back to prompting for anything left unanswered when `canPrompt` is
+ * true (a real terminal), same as the single-target command does.
  */
-async function runFullStackNonInteractive(index, flags) {
-  if (!flags.backend || flags.backend === true) {
+async function runFullStackNonInteractive(index, flags, canPrompt) {
+  let backendBase;
+  if (flags.backend && flags.backend !== true) {
+    backendBase = index.bases.find((b) => b.key === flags.backend && b.framework !== "react");
+    if (!backendBase) {
+      log.error(`❌ Unknown or non-backend base "${flags.backend}".`);
+      process.exit(1);
+    }
+  } else if (canPrompt) {
+    backendBase = await promptBaseForScope(index, "backend");
+  } else {
     log.error("❌ --backend=<key> is required with --fullstack. Run `create-structure compose --list`.");
     process.exit(1);
   }
-  if (!flags.frontend || flags.frontend === true) {
+
+  let frontendBase;
+  if (flags.frontend && flags.frontend !== true) {
+    frontendBase = index.bases.find((b) => b.key === flags.frontend && b.framework === "react");
+    if (!frontendBase) {
+      log.error(`❌ Unknown or non-frontend base "${flags.frontend}".`);
+      process.exit(1);
+    }
+  } else if (canPrompt) {
+    frontendBase = await promptBaseForScope(index, "frontend");
+  } else {
     log.error("❌ --frontend=<key> is required with --fullstack. Run `create-structure compose --list`.");
     process.exit(1);
   }
 
-  const backendBase = index.bases.find((b) => b.key === flags.backend && b.framework !== "react");
-  if (!backendBase) {
-    log.error(`❌ Unknown or non-backend base "${flags.backend}".`);
-    process.exit(1);
-  }
-  const frontendBase = index.bases.find((b) => b.key === flags.frontend && b.framework === "react");
-  if (!frontendBase) {
-    log.error(`❌ Unknown or non-frontend base "${flags.frontend}".`);
-    process.exit(1);
-  }
+  const backendSelected = await resolveOrPromptModules(index, backendBase, flags, canPrompt, "backend:");
+  const frontendSelected = await resolveOrPromptModules(index, frontendBase, flags, canPrompt, "frontend:");
 
-  const backendSelected = resolveModulesFromFlags(index, backendBase, flags, "backend:");
-  const frontendSelected = resolveModulesFromFlags(index, frontendBase, flags, "frontend:");
-
-  if (!flags.name || flags.name === true) {
+  let projectName;
+  if (flags.name && flags.name !== true) {
+    if (!PROJECT_NAME_PATTERN.test(flags.name)) {
+      log.error(
+        "❌ --name must use lowercase letters, numbers, hyphens, dots, or underscores, starting with a letter or number."
+      );
+      process.exit(1);
+    }
+    projectName = flags.name;
+  } else if (canPrompt) {
+    projectName = await promptProjectName();
+  } else {
     log.error("❌ --name=<projectName> is required.");
-    process.exit(1);
-  }
-  if (!PROJECT_NAME_PATTERN.test(flags.name)) {
-    log.error(
-      "❌ --name must use lowercase letters, numbers, hyphens, dots, or underscores, starting with a letter or number."
-    );
     process.exit(1);
   }
 
   const rootDir =
-    flags.out && flags.out !== true ? cleanPath(flags.out) : path.join(process.cwd(), flags.name);
+    flags.out && flags.out !== true ? cleanPath(flags.out) : path.join(process.cwd(), projectName);
   const backendDir = path.join(rootDir, "backend");
   const frontendDir = path.join(rootDir, "frontend");
 
@@ -1072,7 +1141,7 @@ async function runFullStackNonInteractive(index, flags) {
       moduleKeys: Object.keys(backendSelected),
       language: backendBase.language,
       outDir: backendDir,
-      vars: { projectName: flags.name },
+      vars: { projectName },
     });
     backendSpinner.succeed(`Backend created at: ${backendDir}`);
   } catch (error) {
@@ -1087,7 +1156,7 @@ async function runFullStackNonInteractive(index, flags) {
       moduleKeys: Object.keys(frontendSelected),
       language: frontendBase.language,
       outDir: frontendDir,
-      vars: { projectName: flags.name },
+      vars: { projectName },
     });
     frontendSpinner.succeed(`Frontend created at: ${frontendDir}`);
   } catch (error) {
@@ -1096,7 +1165,7 @@ async function runFullStackNonInteractive(index, flags) {
   }
 
   writeFullStackReadme(rootDir, {
-    projectName: flags.name,
+    projectName,
     backendHasAuth: Object.keys(backendSelected).some((key) => key.startsWith("auth-")),
     frontendHasAuth: Boolean(frontendSelected["auth-react"]),
   });
@@ -1133,40 +1202,70 @@ async function handleComposeNonInteractive(argv) {
     return;
   }
 
+  const canPrompt = canPromptInteractively();
+
   if (flags.fullstack) {
-    await runFullStackNonInteractive(index, flags);
+    await runFullStackNonInteractive(index, flags, canPrompt);
     return;
   }
 
-  if (!flags.base || flags.base === true) {
+  let base;
+  if (flags.base && flags.base !== true) {
+    base = index.bases.find((b) => b.key === flags.base);
+    if (!base) {
+      log.error(
+        `❌ Unknown base "${flags.base}". Run \`create-structure compose --list\` to see available bases.`
+      );
+      process.exit(1);
+    }
+  } else if (canPrompt) {
+    // Nothing said what to build yet — ask, same as the fully-interactive
+    // flow's first question, instead of failing over a one-liner that just
+    // hadn't gotten that far.
+    const { scope } = await inquirer.prompt([
+      {
+        type: "list",
+        name: "scope",
+        message: "What do you want to compose?",
+        choices: [
+          { name: "Backend only", value: "backend" },
+          { name: "Frontend only", value: "frontend" },
+          { name: "Full-stack (both)", value: "fullstack" },
+        ],
+      },
+    ]);
+    if (scope === "fullstack") {
+      await runFullStackNonInteractive(index, flags, canPrompt);
+      return;
+    }
+    base = await promptBaseForScope(index, scope);
+  } else {
     log.error("❌ --base=<key> is required. Run `create-structure compose --list` to see available bases.");
-    process.exit(1);
-  }
-  const base = index.bases.find((b) => b.key === flags.base);
-  if (!base) {
-    log.error(
-      `❌ Unknown base "${flags.base}". Run \`create-structure compose --list\` to see available bases.`
-    );
     process.exit(1);
   }
 
   const { key: baseKey, language } = base;
-  const selected = resolveModulesFromFlags(index, base, flags);
+  const selected = await resolveOrPromptModules(index, base, flags, canPrompt);
   const moduleKeys = Object.keys(selected);
 
-  if (!flags.name || flags.name === true) {
+  let projectName;
+  if (flags.name && flags.name !== true) {
+    if (!PROJECT_NAME_PATTERN.test(flags.name)) {
+      log.error(
+        "❌ --name must use lowercase letters, numbers, hyphens, dots, or underscores, starting with a letter or number."
+      );
+      process.exit(1);
+    }
+    projectName = flags.name;
+  } else if (canPrompt) {
+    projectName = await promptProjectName();
+  } else {
     log.error("❌ --name=<projectName> is required.");
-    process.exit(1);
-  }
-  if (!PROJECT_NAME_PATTERN.test(flags.name)) {
-    log.error(
-      "❌ --name must use lowercase letters, numbers, hyphens, dots, or underscores, starting with a letter or number."
-    );
     process.exit(1);
   }
 
   const outDir =
-    flags.out && flags.out !== true ? cleanPath(flags.out) : path.join(process.cwd(), flags.name);
+    flags.out && flags.out !== true ? cleanPath(flags.out) : path.join(process.cwd(), projectName);
 
   if (!flags.yes) {
     const canProceed = await confirmOverwriteIfNeeded(outDir);
@@ -1184,7 +1283,7 @@ async function handleComposeNonInteractive(argv) {
 
   const composeSpinner = ora("Composing project...").start();
   try {
-    await composeBackend({ baseKey, moduleKeys, language, outDir, vars: { projectName: flags.name } });
+    await composeBackend({ baseKey, moduleKeys, language, outDir, vars: { projectName } });
     composeSpinner.succeed(`Project created at: ${outDir}`);
   } catch (error) {
     composeSpinner.fail(`Error composing project: ${error.message}`);

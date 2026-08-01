@@ -165,6 +165,20 @@ create-structure compose --fullstack \
 
 Dimension flags are namespaced with `backend:`/`frontend:` (instead of the bare `--<dimension>` the single-target command uses) since some dimensions — auth, testing — exist on both sides and need independent answers.
 
+### Partial flags in a real terminal — it asks only for what's missing
+
+`compose` doesn't require an all-or-nothing command. Run it in a real terminal with some flags given and some left out, and it prompts for exactly the pieces it doesn't have — same questions, same choices, same defaults as the fully-interactive flow — while using whatever you *did* pass without asking again:
+
+```bash
+# Only a name — asks scope, base, and every dimension, in order
+create-structure compose --name=my-api
+
+# Base + one dimension given — skips straight to whatever's left
+create-structure compose --base=express-ts --database=db-mongoose --name=my-api
+```
+
+This only kicks in when stdin is a real terminal. Piped or CI input (no TTY) keeps the strict behavior below instead — a missing `--base`/`--name`/etc. fails fast with a clear error rather than hanging on a prompt nothing can answer.
+
 ### Non-interactive / scripted use
 
 For CI or scripting, `create-structure compose` takes every answer as a flag instead of prompting — module values are the stable **keys** from the registry, not the display names shown in the interactive menu:
