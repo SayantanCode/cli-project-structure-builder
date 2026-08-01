@@ -22,7 +22,8 @@ Quickly scaffold project directories, organize file structures, and set up devel
 - ⚡️ **Built-in Boilerplates**: Scaffold React+Vite, Next.js (App/Pages Router), or Express+Mongoose projects, in JavaScript or TypeScript, from an interactive picker
 - 🔩 **Official Template Passthrough**: Jump straight into `create-vite`, `create-next-app`, `create-react-app`, Angular, Fastify, or Nest.js from the same menu
 - 🎯 **Interactive Mode**: A guided menu when run with no arguments; smart prompts when arguments are missing
-- 🛡️ **Robust Error Handling**: Comprehensive validation and user-friendly error messages
+- 🛡️ **Robust Error Handling**: Comprehensive validation and user-friendly error messages — an unknown flag or a bad file path fails fast with a clear message pointing at `--help`, not a raw stack trace
+- ❓ **`--help` / `--version`**: `create-structure --help` (or `-h`) prints full usage from anywhere, including as `create-structure compose --help`; `--version`/`-v` prints the installed version
 - 🌍 **Cross-Platform**: Works on Windows(tested), macOS(test needed), and Linux(test needed)
 - 🔄 **Flexible Paths**: Support for both absolute and relative paths
 - 📝 **Batch Operations**: Create complex nested structures in seconds
@@ -69,6 +70,10 @@ npx create-structure-cli
 
 ## 🚀 Quick Start
 ```bash
+# Full usage/help, from anywhere — works standalone or after any command
+create-structure --help        # or -h
+create-structure --version     # or -v
+
 # Interactive mode - choose Official Template, Built-in Boilerplate, or Custom Structure
 create-structure
 
@@ -124,11 +129,15 @@ Instead of picking one fixed boilerplate, the composer lets you build one from i
 - **Auth** — JWT, `POST /auth/{register,login,refresh,logout}` + `GET /auth/me`, access token in memory, refresh token in an httpOnly cookie. Automatically backed by whichever database module you picked (Mongoose or Prisma) — same contract either way. `register`/`login` are rate-limited (20 requests/15 min per IP) against brute-force/mass-registration out of the box. `npm run seed` creates two test accounts so `npm run dev` doesn't start against an empty database
 - **RBAC** — Simple (role-based) or Permission-based
 - **Real-time** — Socket.IO, a live "who's online" presence demo authenticated with the same JWT the HTTP API uses (Express or Fastify; requires the Auth module)
+- **Cache** — Redis (via `ioredis`), a `cache.get/set/del/getOrSet` helper, wired into startup the same way the database modules are
+- **Queue** — BullMQ background jobs, a worked producer/worker example — the worker runs as its own process on purpose, so a slow job never blocks an HTTP response
+- **Cron** — scheduled jobs (`node-cron`), with a README callout about the real multi-instance duplicate-execution gotcha most tutorials skip
+- **Logging** (Express only) — Pino (default), Winston, or None — a genuinely dependency-free console logger if you pick None, not secretly Pino anyway
 - **Testing** — Jest
 - **Docker** — a ready-to-use `Dockerfile`
 - **CI** — a GitHub Actions workflow that runs your build/tests on every push/PR
 
-Every composed backend also always includes: `GET /health` (liveness) and `GET /healthz` (readiness — reports real database connectivity if a database module is selected, `503` if it's down), a graceful `SIGTERM`/`SIGINT` shutdown handler that closes the HTTP server and database connection before exiting instead of dropping in-flight requests, and env-var validation that fails fast and loudly at boot on a missing/malformed `PORT`/`CORS_ORIGIN`/database URL instead of surfacing as a confusing runtime error later. Express projects also get structured, leveled JSON logging (`pino`) in place of plain `morgan` output — Fastify and NestJS already have their own structured loggers built in.
+Every composed backend also always includes: `GET /health` (liveness) and `GET /healthz` (readiness — reports real connectivity for every connected dependency you picked — database, cache, queue — `503` if any is down), a `src/loaders/index.ts` that connects everything before the app starts accepting requests, a graceful `SIGTERM`/`SIGINT` shutdown handler that closes those connections before exiting instead of dropping in-flight requests, and env-var validation that fails fast and loudly at boot on a missing/malformed `PORT`/`CORS_ORIGIN`/database URL instead of surfacing as a confusing runtime error later. Fastify and NestJS already have their own structured loggers built in, so the Logging dimension is Express-only.
 
 **Frontend dimensions**, available for the React + Vite base:
 

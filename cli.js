@@ -2,6 +2,7 @@
 //native modules
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 import { spawn } from "child_process";
 //external modules
 import inquirer from "inquirer";
@@ -253,15 +254,86 @@ async function maybeInstallDependencies(outDir, packageJsonContent, devCommand) 
   }
 }
 
+const CLI_VERSION = JSON.parse(
+  fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "package.json"), "utf-8")
+).version;
+
+/**
+ * Prints top-level usage/help. Shown for `--help`/`-h` (anywhere in argv,
+ * for any command) and whenever a command falls through to the "generate
+ * from a structure file" fast path with a value that isn't an existing
+ * file — see the unknown-option guard in main() below.
+ */
+function printHelp() {
+  log.custom(`\n✨ Create-Structure-CLI v${CLI_VERSION} ✨\n`, "rgb(85, 254, 254).underline");
+  log.info(
+    "Scaffold a new project — an official framework generator, a ready-made boilerplate, a modular composer (backend + frontend picked piece by piece), or an exact custom structure from a file/tree/GitHub repo.\n"
+  );
+
+  log.custom("Usage:", "bold");
+  log.info("  create-structure                            Launch the interactive menu");
+  log.info("  create-structure <file> [outputDir]         Generate from a structure file (text tree or JSON)");
+  log.info("  create-structure compose [flags]            Non-interactive composer (see below)");
+  log.info("  create-structure --help, -h                 Show this help");
+  log.info("  create-structure --version, -v               Print the installed version\n");
+
+  log.custom("Compose flags:", "bold");
+  log.info("  --list                                       List every base and module (with its dimension flag)");
+  log.info("  --base=<key>                                 Backend or frontend base to scaffold");
+  log.info("  --fullstack --backend=<key> --frontend=<key>  Scaffold both sides together");
+  log.info("  --<dimension>=<key>                          Pick a module for a dimension, e.g. --database=db-mongoose");
+  log.info("                                                (full-stack: --backend:<dimension>=<key> / --frontend:<dimension>=<key>)");
+  log.info("  --name=<projectName>                         Project name (required)");
+  log.info("  --out=<dir>                                  Output directory (defaults to ./<name>)");
+  log.info("  --yes                                        Skip the install-dependencies confirmation prompt");
+  log.info("  --install                                    Install dependencies automatically\n");
+
+  log.info("Run `create-structure compose --list` to see every available base and module for the flags above.\n");
+
+  log.custom("Examples:", "bold");
+  log.info(
+    "  create-structure compose --base=express-ts --database=db-mongoose --auth=auth-jwt --name=my-api --out=./my-api --yes --install"
+  );
+  log.info(
+    "  create-structure compose --fullstack --backend=express-ts --frontend=react-vite-tsx \\\n" +
+      "    --backend:database=db-mongoose --frontend:auth=auth-react --name=my-app --yes --install"
+  );
+  log.info("  create-structure ./structure.txt ./my-project\n");
+}
+
 /**
  * Main entry point with Inquirer flow.
  */
 async function main() {
+  const rawArgs = process.argv.slice(2);
+
+  // --help/-h and --version/-v work no matter where they appear or what
+  // else was passed — checked before any other dispatch so they can't be
+  // shadowed by, say, `compose --help` trying to resolve "--help" as a
+  // module key instead.
+  if (rawArgs.includes("--help") || rawArgs.includes("-h")) {
+    printHelp();
+    return;
+  }
+  if (rawArgs.includes("--version") || rawArgs.includes("-v")) {
+    log.info(CLI_VERSION);
+    return;
+  }
+
   // Non-interactive composer: `create-structure compose --base=... [--dimension=key]... --name=...`
   // Keeps the composer usable from scripts/CI without going through prompts.
   if (process.argv[2] === "compose") {
     await handleComposeNonInteractive(process.argv.slice(3));
     return;
+  }
+
+  // Any other leading flag (a typo, or one that only makes sense under
+  // `compose`) is not a valid file path either — fail with a clear error
+  // instead of falling into the file-path branch below and printing a
+  // confusing "File not found: --whatever".
+  if (process.argv.length > 2 && process.argv[2].startsWith("-")) {
+    log.error(`❌ Unknown option "${process.argv[2]}". Run \`create-structure --help\` to see available commands.`);
+    process.exit(1);
   }
 
   // Non-interactive fast path: `create-structure <file> [outputDir]`
@@ -271,6 +343,7 @@ async function main() {
     const fileValidation = validateFile(filePath);
     if (!fileValidation.valid) {
       log.error(fileValidation.error);
+      log.info("Run `create-structure --help` to see available commands.");
       process.exit(1);
     }
 
