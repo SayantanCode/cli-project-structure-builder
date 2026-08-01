@@ -811,7 +811,7 @@ const COMPOSER_DIMENSIONS = [
   ["cache", "Add a caching layer (Redis)?"],
   ["queue", "Add a background job queue (BullMQ)?"],
   ["cron", "Add scheduled/cron jobs (node-cron)?"],
-  ["logging", "Choose a logging library:", "Pino (default)", "Pino (default)"],
+  ["logging", "Choose a logging library:", "Pino"],
   ["testing", "Choose a testing library:"],
   ["docker", "Add Docker support?"],
   ["ci", "Add CI (GitHub Actions)?"],
@@ -1126,7 +1126,7 @@ async function promptModuleSelection(index, base, defaultOverrides = {}) {
   }
 
   const selected = {};
-  for (const [dimension, message, defaultName, skipLabel = "None"] of COMPOSER_DIMENSIONS) {
+  for (const [dimension, message, defaultName] of COMPOSER_DIMENSIONS) {
     const candidates = modulesByDimension[dimension] || [];
     if (candidates.length === 0) continue;
 
@@ -1135,7 +1135,7 @@ async function promptModuleSelection(index, base, defaultOverrides = {}) {
     );
     if (available.length === 0) continue;
 
-    const choices = [...available.map((mod) => mod.name), skipLabel];
+    const choices = [...available.map((mod) => mod.name), "None"];
     const prompt = { type: "list", name: "choice", message, choices };
     const effectiveDefault = defaultOverrides[dimension] || defaultName;
     if (effectiveDefault && choices.includes(effectiveDefault)) {
@@ -1143,7 +1143,7 @@ async function promptModuleSelection(index, base, defaultOverrides = {}) {
     }
 
     const { choice } = await inquirer.prompt([prompt]);
-    if (choice === skipLabel) continue;
+    if (choice === "None") continue;
 
     const mod = available.find((m) => m.name === choice);
     selected[mod.key] = mod;
