@@ -5,6 +5,10 @@
   "bin": {
     "create-structure": "./cli.js"
   },
+  "files": [
+    "cli.js",
+    "lib"
+  ],
   "type": "module",
   "engines": {
     "node": ">=20"
